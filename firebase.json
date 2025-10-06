@@ -1,0 +1,26 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "swirl-1856f",
+          "appId": "1:921368661200:android:e6834cf49e9b9a803e62d5",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "swirl-1856f",
+          "configurations": {
+            "android": "1:921368661200:android:e6834cf49e9b9a803e62d5",
+            "ios": "1:921368661200:ios:d311433b82f308473e62d5",
+            "web": "1:921368661200:web:0572c15f21634af53e62d5"
+          }
+        }
+      }
+    }
+  },
+  "firestore": {
+    "rules": "firestore.rules"
+  }
+}
