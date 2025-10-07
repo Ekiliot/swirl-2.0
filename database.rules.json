@@ -1,0 +1,20 @@
+// database.rules.json
+{
+  "rules": {
+    "chat_roulette": {
+      "queue": {
+        "$userId": {
+          ".read": "auth != null && auth.uid == $userId",
+          ".write": "auth != null && auth.uid == $userId",
+          ".validate": "newData.hasChildren(['uid', 'name', 'age', 'gender', 'interests', 'status', 'joinedAt'])"
+        }
+      },
+      "matches": {
+        "$userId": {
+          ".read": "auth != null && auth.uid == $userId",
+          ".write": "auth != null && (auth.uid == $userId || auth.token.admin == true)"
+        }
+      }
+    }
+  }
+}

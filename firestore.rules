@@ -1,0 +1,111 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthed() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthed() && request.auth.uid == userId;
+    }
+
+    // Validation helpers
+    function isValidName(name) {
+      return name is string && name.size() > 0 && name.size() <= 64;
+    }
+
+    function isValidAge(age) {
+      return age is int && age >= 18 && age <= 120;
+    }
+
+    function isValidGender(gender) {
+      return gender is string && (gender == 'male' || gender == 'female' || gender == 'other');
+    }
+
+    function isValidBio(bio) {
+      return bio is string && bio.size() <= 90;
+    }
+
+    // We cannot iterate elements for type-checking in rules; keep it simple
+    function isValidInterests(interests) {
+      return interests is list && interests.size() <= 50;
+    }
+
+    match /Users/{userId} {
+      // Read: owner only
+      allow get, list, read: if isOwner(userId);
+
+      // Create: owner only with validation
+      allow create: if isOwner(userId)
+        && (request.resource.data.email is string)
+        && isValidName(request.resource.data.name)
+        && isValidAge(request.resource.data.age)
+        && isValidGender(request.resource.data.gender)
+        && (
+          !('bio' in request.resource.data) || isValidBio(request.resource.data.bio)
+        )
+        && (
+          !('interests' in request.resource.data) || isValidInterests(request.resource.data.interests)
+        )
+        && (request.resource.data.createdAt == request.time)
+        && (request.resource.data.updatedAt == request.time);
+
+      // Update: owner only, cannot change email/createdAt, must update updatedAt
+      allow update: if isOwner(userId)
+        && (request.resource.data.email == resource.data.email)
+        && (request.resource.data.createdAt == resource.data.createdAt)
+        && (request.resource.data.updatedAt is timestamp)
+        && (request.resource.data.updatedAt >= resource.data.updatedAt)
+        && (
+          !('name' in request.resource.data) || isValidName(request.resource.data.name)
+        )
+        && (
+          !('age' in request.resource.data) || isValidAge(request.resource.data.age)
+        )
+        && (
+          !('gender' in request.resource.data) || isValidGender(request.resource.data.gender)
+        )
+        && (
+          !('bio' in request.resource.data) || isValidBio(request.resource.data.bio)
+        )
+        && (
+          !('interests' in request.resource.data) || isValidInterests(request.resource.data.interests)
+        );
+
+      // Delete disabled (adjust if needed)
+      allow delete: if false;
+    }
+
+    // Правила для постоянных чатов (Direct Messages) - теперь включают chat roulette
+    match /direct_messages/{chatId} {
+      // Читать могут только участники чата
+      allow read: if isAuthed() && request.auth.uid in resource.data.participants;
+      
+      // Создавать могут только участники (включая chat roulette)
+      allow create: if isAuthed() 
+        && request.auth.uid in request.resource.data.participants;
+      
+      // Обновлять могут только участники
+      allow update: if isAuthed() && request.auth.uid in resource.data.participants;
+      
+      // Удалять могут только участники
+      allow delete: if isAuthed() && request.auth.uid in resource.data.participants;
+      
+      // Подколлекция сообщений - упрощенные правила
+      match /messages/{messageId} {
+        // Читать могут только авторизованные пользователи
+        allow read: if isAuthed();
+        
+        // Создавать могут только авторизованные пользователи
+        allow create: if isAuthed() && request.resource.data.senderId == request.auth.uid;
+        
+        // Обновлять могут только отправители сообщений
+        allow update: if isAuthed() && request.resource.data.senderId == request.auth.uid;
+        
+        // Удалять могут только отправители сообщений
+        allow delete: if isAuthed() && resource.data.senderId == request.auth.uid;
+      }
+    }
+  }
+}
