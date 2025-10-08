@@ -21,20 +21,38 @@ class ChatService {
         .collection(_directMessagesPath)
         .where('participants', arrayContains: userId)
         .snapshots()
-        .map((snapshot) {
+        .asyncMap((snapshot) async {
           print('ChatService: Найдено ${snapshot.docs.length} чатов');
           
-          final chats = snapshot.docs.map((doc) {
+          final List<Map<String, dynamic>> validChats = [];
+          
+          // Проверяем каждый чат на наличие сообщений
+          for (final doc in snapshot.docs) {
             final data = doc.data();
-            print('ChatService: Чат ${doc.id}: ${data['participants']}');
-            return {
-              'id': doc.id,
-              ...data,
-            };
-          }).toList();
+            final chatId = doc.id;
+            
+            // Проверяем есть ли сообщения в чате
+            final messagesSnapshot = await _firestore
+                .collection(_directMessagesPath)
+                .doc(chatId)
+                .collection('messages')
+                .limit(1)
+                .get();
+            
+            // Добавляем чат только если в нем есть сообщения
+            if (messagesSnapshot.docs.isNotEmpty) {
+              print('ChatService: Чат ${chatId} содержит сообщения');
+              validChats.add({
+                'id': chatId,
+                ...data,
+              });
+            } else {
+              print('ChatService: Чат ${chatId} пустой, пропускаем');
+            }
+          }
           
           // Сортируем по времени последнего сообщения
-          chats.sort((a, b) {
+          validChats.sort((a, b) {
             final timeA = a['lastMessageTime'];
             final timeB = b['lastMessageTime'];
             
@@ -62,8 +80,8 @@ class ChatService {
             return dateTimeB.compareTo(dateTimeA); // Новые сверху
           });
           
-          print('ChatService: Возвращаем ${chats.length} отсортированных чатов');
-          return chats;
+          print('ChatService: Возвращаем ${validChats.length} валидных чатов (${snapshot.docs.length - validChats.length} пустых отфильтровано)');
+          return validChats;
         });
   }
 
@@ -111,6 +129,50 @@ class ChatService {
       'lastMessage': text,
       'lastMessageTime': FieldValue.serverTimestamp(),
     });
+  }
+
+  /// Отметить сообщение как прочитанное
+  Future<void> markMessageAsRead(String chatId, String messageId) async {
+    try {
+      await _firestore
+          .collection(_directMessagesPath)
+          .doc(chatId)
+          .collection('messages')
+          .doc(messageId)
+          .update({'isRead': true});
+      
+      print('ChatService: Сообщение $messageId отмечено как прочитанное');
+    } catch (e) {
+      print('ChatService: Ошибка при обновлении статуса прочтения: $e');
+    }
+  }
+
+  /// Отметить все сообщения в чате как прочитанные
+  Future<void> markAllMessagesAsRead(String chatId) async {
+    final userId = _auth.currentUser?.uid;
+    if (userId == null) return;
+
+    try {
+      // Получаем все непрочитанные сообщения от других пользователей
+      final unreadMessages = await _firestore
+          .collection(_directMessagesPath)
+          .doc(chatId)
+          .collection('messages')
+          .where('senderId', isNotEqualTo: userId)
+          .where('isRead', isEqualTo: false)
+          .get();
+
+      // Обновляем каждое сообщение
+      final batch = _firestore.batch();
+      for (final doc in unreadMessages.docs) {
+        batch.update(doc.reference, {'isRead': true});
+      }
+      
+      await batch.commit();
+      print('ChatService: ${unreadMessages.docs.length} сообщений отмечено как прочитанные');
+    } catch (e) {
+      print('ChatService: Ошибка при массовом обновлении статуса прочтения: $e');
+    }
   }
 
   /// Получить информацию о собеседнике
@@ -189,5 +251,63 @@ class ChatService {
     batch.delete(_firestore.collection(_directMessagesPath).doc(chatId));
     
     await batch.commit();
+  }
+
+  /// Ручная очистка пустых чатов (для отладки)
+  Future<int> cleanupEmptyChats() async {
+    try {
+      final userId = _auth.currentUser?.uid;
+      if (userId == null) {
+        print('ChatService: Пользователь не авторизован');
+        return 0;
+      }
+
+      print('ChatService: Запуск ручной очистки пустых чатов...');
+      
+      // Получаем все чаты пользователя
+      final chatsSnapshot = await _firestore
+          .collection(_directMessagesPath)
+          .where('participants', arrayContains: userId)
+          .get();
+      
+      final List<String> emptyChats = [];
+      
+      // Проверяем каждый чат на наличие сообщений
+      for (final doc in chatsSnapshot.docs) {
+        final chatId = doc.id;
+        final messagesSnapshot = await _firestore
+            .collection(_directMessagesPath)
+            .doc(chatId)
+            .collection('messages')
+            .limit(1)
+            .get();
+        
+        if (messagesSnapshot.docs.isEmpty) {
+          emptyChats.add(chatId);
+          print('ChatService: Найден пустой чат: $chatId');
+        }
+      }
+      
+      // Удаляем пустые чаты
+      if (emptyChats.isNotEmpty) {
+        print('ChatService: Удаляем ${emptyChats.length} пустых чатов...');
+        
+        final batch = _firestore.batch();
+        for (final chatId in emptyChats) {
+          final chatRef = _firestore.collection(_directMessagesPath).doc(chatId);
+          batch.delete(chatRef);
+        }
+        
+        await batch.commit();
+        print('ChatService: Успешно удалено ${emptyChats.length} пустых чатов');
+      } else {
+        print('ChatService: Пустые чаты не найдены');
+      }
+      
+      return emptyChats.length;
+    } catch (e) {
+      print('ChatService: Ошибка при очистке пустых чатов: $e');
+      return 0;
+    }
   }
 }

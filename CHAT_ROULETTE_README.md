@@ -115,7 +115,7 @@ direct_messages/
 
 ```bash
 # Установка Firebase CLI
-npm install -g firebase-tools
+npm install g- firebase-tools
 
 # Вход в аккаунт
 firebase login

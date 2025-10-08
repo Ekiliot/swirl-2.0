@@ -2,15 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:eva_icons_flutter/eva_icons_flutter.dart';
 import '../../../theme/app_theme.dart';
+import 'media_picker_bottom_sheet.dart';
 
 class MessageInput extends StatefulWidget {
   final Function(String) onSendMessage;
   final VoidCallback onAttach;
+  final Function(Map<String, dynamic>)? onMediaSelected;
 
   const MessageInput({
     super.key,
     required this.onSendMessage,
     required this.onAttach,
+    this.onMediaSelected,
   });
 
   @override
@@ -119,7 +122,7 @@ class _MessageInputState extends State<MessageInput> {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(20),
-          onTap: widget.onAttach,
+          onTap: _showMediaPicker,
           child: Icon(
             EvaIcons.attach2Outline,
             color: Colors.grey.shade400,
@@ -245,5 +248,20 @@ class _MessageInputState extends State<MessageInput> {
         ),
       ),
     );
+  }
+
+  void _showMediaPicker() {
+    if (widget.onMediaSelected != null) {
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: Colors.transparent,
+        builder: (context) => MediaPickerBottomSheet(
+          onMediaSelected: widget.onMediaSelected!,
+        ),
+      );
+    } else {
+      // Fallback к старому поведению
+      widget.onAttach();
+    }
   }
 }

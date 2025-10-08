@@ -100,8 +100,11 @@ service cloud.firestore {
         // Создавать могут только авторизованные пользователи
         allow create: if isAuthed() && request.resource.data.senderId == request.auth.uid;
         
-        // Обновлять могут только отправители сообщений
-        allow update: if isAuthed() && request.resource.data.senderId == request.auth.uid;
+        // Обновлять могут отправители сообщений И участники чата (для isRead)
+        allow update: if isAuthed() && (
+          request.resource.data.senderId == request.auth.uid || // Отправитель может обновлять
+          request.auth.uid in get(/databases/$(database)/documents/direct_messages/$(chatId)).data.participants // Участник чата может обновлять isRead
+        );
         
         // Удалять могут только отправители сообщений
         allow delete: if isAuthed() && resource.data.senderId == request.auth.uid;

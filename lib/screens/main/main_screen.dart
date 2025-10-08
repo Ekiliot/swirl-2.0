@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:eva_icons_flutter/eva_icons_flutter.dart';
 import 'package:animations/animations.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../theme/app_theme.dart';
 import '../../services/chat_service.dart';
@@ -25,11 +24,16 @@ class _MainScreenState extends State<MainScreen> {
   double _matchCardHeight = 220.0; // Начинаем с полной высоты (раскрытое состояние)
   static const double _minHeight = 80.0;
   static const double _maxHeight = 220.0;
+  
+  // Кэш для списка чатов
+  Stream<List<Map<String, dynamic>>>? _chatsStream;
 
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    // Инициализируем стрим чатов один раз
+    _chatsStream = _chatService.getUserChats();
   }
 
   @override
@@ -334,42 +338,7 @@ class _MainScreenState extends State<MainScreen> {
             SliverToBoxAdapter(child: SizedBox(height: 20)),
             
             // Список чатов
-            StreamBuilder<List<Map<String, dynamic>>>(
-              stream: _chatService.getUserChats(),
-              builder: (context, snapshot) {
-                print('MainScreen: StreamBuilder состояние: ${snapshot.connectionState}');
-                print('MainScreen: Данные: ${snapshot.data}');
-                print('MainScreen: Ошибка: ${snapshot.error}');
-                
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return SliverFillRemaining(
-                    child: Center(
-                      child: CircularProgressIndicator(
-                        color: AppTheme.toxicYellow,
-                      ),
-                    ),
-                  );
-                }
-
-                final chats = snapshot.data ?? [];
-                print('MainScreen: Получено ${chats.length} чатов');
-                
-                if (chats.isEmpty) {
-                  print('MainScreen: Показываем пустой список');
-                  return SliverFillRemaining(child: _buildEmptyChatsList());
-                }
-
-                return SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) => Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16),
-                      child: _buildChatItem(context, chats[index]),
-                    ),
-                    childCount: chats.length,
-                  ),
-                );
-              },
-            ),
+            _buildChatsList(),
             
             // Отступ снизу для кнопок
             SliverToBoxAdapter(child: SizedBox(height: 80)),
@@ -445,6 +414,50 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
+  /// Создание списка чатов с кэшированным стримом
+  Widget _buildChatsList() {
+    if (_chatsStream == null) {
+      return SliverFillRemaining(
+        child: Center(
+          child: CircularProgressIndicator(
+            color: AppTheme.toxicYellow,
+          ),
+        ),
+      );
+    }
+
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: _chatsStream,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return SliverFillRemaining(
+            child: Center(
+              child: CircularProgressIndicator(
+                color: AppTheme.toxicYellow,
+              ),
+            ),
+          );
+        }
+
+        final chats = snapshot.data ?? [];
+        
+        if (chats.isEmpty) {
+          return SliverFillRemaining(child: _buildEmptyChatsList());
+        }
+
+        return SliverList(
+          delegate: SliverChildBuilderDelegate(
+            (context, index) => Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: _buildChatItem(context, chats[index]),
+            ),
+            childCount: chats.length,
+          ),
+        );
+      },
+    );
+  }
+
   /// Форматирование времени последнего сообщения
   String _formatLastMessageTime(dynamic timestamp) {
     if (timestamp == null) return '';
@@ -508,14 +521,9 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   Widget _buildChatItem(BuildContext context, Map<String, dynamic> chatData) {
-    print('MainScreen: Строим чат ${chatData['id']}');
-    print('MainScreen: Данные чата: $chatData');
-    
     final partnerInfo = _chatService.getPartnerInfo(chatData);
-    print('MainScreen: Информация о собеседнике: $partnerInfo');
     
     if (partnerInfo == null) {
-      print('MainScreen: Не удалось получить информацию о собеседнике');
       return SizedBox.shrink();
     }
 

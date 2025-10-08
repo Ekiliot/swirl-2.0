@@ -1,14 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:ui';
 import 'dart:async';
+import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../theme/app_theme.dart';
 import '../../services/chat_roulette_service.dart';
+import '../../services/pinned_messages_service.dart';
 import '../chat/widgets/chat_header.dart';
+import '../chat/widgets/visible_message_bubble.dart';
+import '../chat/widgets/media_message_bubble.dart';
 import '../chat/widgets/message_input.dart';
 import '../chat/widgets/typing_indicator.dart';
+import '../chat/widgets/pinned_message_widget.dart';
 import '../chat/models/chat_message.dart';
 
 // Линейное смещение градиента для shimmer
@@ -49,8 +55,16 @@ class _ChatRouletteScreenState extends State<ChatRouletteScreen>
   final TextEditingController _messageController = TextEditingController();
   final FocusNode _focusNode = FocusNode();
   final GlobalKey<AnimatedListState> _skeletonListKey = GlobalKey<AnimatedListState>();
+  
+  // Состояние загрузки медиа
+  bool _isUploadingMedia = false;
+  double _mediaUploadProgress = 0.0;
+  Uint8List? _mediaThumbnail;
   int _skeletonCount = 0;
   Timer? _skeletonTimer;
+  
+  // Закрепленное сообщение
+  ChatMessage? _pinnedMessage;
   
   // Данные текущего матча
   String? _currentPartner;
@@ -68,15 +82,21 @@ class _ChatRouletteScreenState extends State<ChatRouletteScreen>
       duration: Duration(milliseconds: 1200),
     )..repeat();
     
+    // Загружаем закрепленные сообщения
+    _loadPinnedMessages();
+    
     // Если передан существующий чат, загружаем его
     if (widget.initialChatId != null) {
       _currentChatId = widget.initialChatId;
       _currentPartner = widget.initialPartnerName;
       _currentAvatar = widget.initialPartnerAvatar;
       _isSearching = false;
+      // Останавливаем анимацию скелетона для существующего чата
+      _skeletonTimer?.cancel();
+      _skeletonCount = 0;
       _loadChatMessages();
     } else {
-      _startSkeletonFlow();
+    _startSkeletonFlow();
       _initializeChatRoulette();
     }
   }
@@ -149,12 +169,26 @@ class _ChatRouletteScreenState extends State<ChatRouletteScreen>
         interests: ['Музыка', 'Спорт'], // Временно, нужно получить из профиля
       );
 
-      // Слушаем изменения статуса
-      _chatRouletteService.watchUserStatus().listen((status) {
-        if (mounted && status == 'connected') {
-          _loadCurrentMatch();
-        }
-      });
+        // Слушаем матчи напрямую
+        _chatRouletteService.watchMatch().listen((match) {
+          if (mounted && match != null) {
+            // Останавливаем анимацию скелетона
+            _skeletonTimer?.cancel();
+            
+            setState(() {
+              _isSearching = false;
+              _currentPartner = match['partnerName'] as String?;
+              _currentAvatar = match['partnerAvatar'] as String?;
+              _currentChatId = match['chatId'] as String?;
+              // Очищаем скелетоны при переходе к чату
+              _skeletonCount = 0;
+            });
+            
+            if (_currentChatId != null) {
+              _loadChatMessages();
+            }
+          }
+        });
     } catch (e) {
       print('Ошибка при начале поиска: $e');
       _startDemoSearch();
@@ -166,11 +200,16 @@ class _ChatRouletteScreenState extends State<ChatRouletteScreen>
     try {
       final match = await _chatRouletteService.getCurrentMatch();
       if (match != null) {
+        // Останавливаем анимацию скелетона
+        _skeletonTimer?.cancel();
+        
         setState(() {
           _currentPartner = match['partnerName'] as String;
           _currentAvatar = match['partnerAvatar'] as String;
           _currentChatId = match['chatId'] as String;
           _isSearching = false;
+          // Очищаем скелетоны при переходе к чату
+          _skeletonCount = 0;
         });
 
         // Загружаем сообщения чата
@@ -181,6 +220,228 @@ class _ChatRouletteScreenState extends State<ChatRouletteScreen>
     } catch (e) {
       print('Ошибка загрузки матча: $e');
       _startDemoSearch();
+    }
+  }
+
+  /// Обработка видимости сообщения
+  void _onMessageVisible(String messageText) {
+    if (_currentChatId != null) {
+      // Получаем ID сообщения из Firestore
+      _chatRouletteService.getChatMessages(_currentChatId!).first.then((messages) {
+        final messageData = messages.firstWhere(
+          (data) => data['text'] == messageText && data['senderId'] != FirebaseAuth.instance.currentUser?.uid,
+          orElse: () => messages.first,
+        );
+        
+        if (messageData['id'] != null) {
+          _chatRouletteService.markMessageAsRead(_currentChatId!, messageData['id']);
+        }
+      });
+    }
+  }
+
+  /// Закрепление сообщения
+  void _pinMessage(ChatMessage message) async {
+    try {
+      final success = await PinnedMessagesService.pinMessage(message);
+      if (success) {
+        setState(() {
+          _pinnedMessage = message;
+        });
+        print('Сообщение закреплено: ${message.text}');
+      } else {
+        print('Ошибка при закреплении сообщения');
+      }
+    } catch (e) {
+      print('Ошибка при закреплении сообщения: $e');
+    }
+  }
+
+  /// Открепление сообщения
+  void _unpinMessage() async {
+    try {
+      if (_pinnedMessage != null) {
+        final success = await PinnedMessagesService.unpinMessage(_pinnedMessage!);
+        if (success) {
+          setState(() {
+            _pinnedMessage = null;
+          });
+          print('Сообщение откреплено');
+        } else {
+          print('Ошибка при откреплении сообщения');
+        }
+      }
+    } catch (e) {
+      print('Ошибка при откреплении сообщения: $e');
+    }
+  }
+
+  /// Загрузка закрепленных сообщений из локального хранилища
+  void _loadPinnedMessages() async {
+    try {
+      final pinnedMessages = await PinnedMessagesService.getPinnedMessages();
+      if (pinnedMessages.isNotEmpty) {
+        setState(() {
+          _pinnedMessage = pinnedMessages.first; // Показываем только первое закрепленное сообщение
+        });
+        print('Загружено закрепленных сообщений: ${pinnedMessages.length}');
+      }
+    } catch (e) {
+      print('Ошибка при загрузке закрепленных сообщений: $e');
+    }
+  }
+
+  /// Создание виджета загружаемого медиа
+  Widget _buildUploadingMediaMessage() {
+    return Container(
+      constraints: BoxConstraints(
+        maxWidth: 280,
+        maxHeight: 200,
+      ),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(24),
+          topRight: Radius.circular(24),
+          bottomLeft: Radius.circular(6),
+          bottomRight: Radius.circular(24),
+        ),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppTheme.toxicYellow,
+            AppTheme.darkYellow,
+          ],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.toxicYellow.withOpacity(0.2),
+            blurRadius: 12,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(24),
+          topRight: Radius.circular(24),
+          bottomLeft: Radius.circular(6),
+          bottomRight: Radius.circular(24),
+        ),
+        child: Stack(
+          children: [
+            // Миниатюра как фон
+            if (_mediaThumbnail != null)
+              Container(
+                width: double.infinity,
+                height: double.infinity,
+                child: Image.memory(
+                  _mediaThumbnail!,
+                  fit: BoxFit.cover,
+                ),
+              ),
+            
+            // Оверлей с прогрессом
+            Container(
+              width: double.infinity,
+              height: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.6),
+              ),
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // Круглый прогресс бар
+                    SizedBox(
+                      width: 60,
+                      height: 60,
+                      child: CircularProgressIndicator(
+                        value: _mediaUploadProgress,
+                        strokeWidth: 3,
+                        backgroundColor: Colors.white.withOpacity(0.2),
+                        valueColor: AlwaysStoppedAnimation<Color>(AppTheme.toxicYellow),
+                      ),
+                    ),
+                    
+                    const SizedBox(height: 12),
+                    
+                    // Текст прогресса
+                    Text(
+                      '${(_mediaUploadProgress * 100).toInt()}%',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Обработка выбора медиа
+  void _onMediaSelected(Map<String, dynamic> mediaData) async {
+    try {
+      setState(() {
+        _isUploadingMedia = true;
+        _mediaUploadProgress = 0.0;
+        _mediaThumbnail = mediaData['thumbnailData'];
+      });
+
+      // Не создаем временное сообщение - показываем только виджет загрузки
+
+      // Симулируем прогресс загрузки
+      for (int i = 0; i <= 100; i += 10) {
+        await Future.delayed(const Duration(milliseconds: 100));
+        setState(() {
+          _mediaUploadProgress = i / 100.0;
+        });
+      }
+
+      // Отправляем медиа сообщение
+      await _chatRouletteService.sendMessage(
+        chatId: _currentChatId!,
+        text: mediaData['type'] == 'photo' ? '📷 Фото' : '🎥 Видео',
+        mediaType: mediaData['type'],
+        mediaUrl: mediaData['url'],
+        mediaSize: mediaData['size'],
+        mediaDuration: mediaData['duration'],
+      );
+
+      // Завершаем загрузку
+      setState(() {
+        _isUploadingMedia = false;
+        _mediaThumbnail = null;
+      });
+
+      // Прокручиваем к концу
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    } catch (e) {
+      print('Ошибка при отправке медиа: $e');
+      setState(() {
+        _isUploadingMedia = false;
+        _mediaThumbnail = null;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Ошибка отправки медиа'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 
@@ -207,6 +468,10 @@ class _ChatRouletteScreenState extends State<ChatRouletteScreen>
               isMine: data['senderId'] == FirebaseAuth.instance.currentUser?.uid,
               timestamp: timestamp,
               isRead: data['isRead'] as bool? ?? false,
+              mediaType: data['mediaType'] as String?,
+              mediaUrl: data['mediaUrl'] as String?,
+              mediaSize: data['mediaSize'] as int?,
+              mediaDuration: data['mediaDuration'] as int?,
             );
           }).toList();
           
@@ -229,11 +494,16 @@ class _ChatRouletteScreenState extends State<ChatRouletteScreen>
   void _startDemoSearch() {
     Future.delayed(Duration(seconds: 3), () {
       if (mounted) {
-        setState(() {
-          _isSearching = false;
+        // Останавливаем анимацию скелетона
+        _skeletonTimer?.cancel();
+        
+          setState(() {
+            _isSearching = false;
           _currentPartner = 'Анна';
           _currentAvatar = 'А';
-          _loadDemoMessages();
+          // Очищаем скелетоны при переходе к чату
+          _skeletonCount = 0;
+            _loadDemoMessages();
         });
       }
     });
@@ -266,39 +536,39 @@ class _ChatRouletteScreenState extends State<ChatRouletteScreen>
       );
     } else {
       // Демо-режим
-      setState(() {
-        _messages.add(ChatMessage(
-          text: messageText.trim(),
-          isMine: true,
-          timestamp: DateTime.now(),
-          isRead: false,
-        ));
-      });
+    setState(() {
+      _messages.add(ChatMessage(
+        text: messageText.trim(),
+        isMine: true,
+        timestamp: DateTime.now(),
+        isRead: false,
+      ));
+    });
 
-      // Имитация набора текста
-      setState(() => _isTyping = true);
-      Future.delayed(Duration(seconds: 2), () {
-        if (mounted) {
-          setState(() {
-            _isTyping = false;
-            _messages.add(ChatMessage(
-              text: 'Отлично! 😊',
-              isMine: false,
-              timestamp: DateTime.now(),
-            ));
-          });
+    // Имитация набора текста
+    setState(() => _isTyping = true);
+    Future.delayed(Duration(seconds: 2), () {
+      if (mounted) {
+        setState(() {
+          _isTyping = false;
+          _messages.add(ChatMessage(
+            text: 'Отлично! 😊',
+            isMine: false,
+            timestamp: DateTime.now(),
+          ));
+        });
         }
       });
     }
-
+        
     // Прокрутка вниз после отправки
-    Future.delayed(Duration(milliseconds: 100), () {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
+        Future.delayed(Duration(milliseconds: 100), () {
+          if (_scrollController.hasClients) {
+            _scrollController.animateTo(
+              _scrollController.position.maxScrollExtent,
+              duration: Duration(milliseconds: 300),
+              curve: Curves.easeOut,
+            );
       }
     });
   }
@@ -386,8 +656,15 @@ class _ChatRouletteScreenState extends State<ChatRouletteScreen>
                 ),
         ),
       ),
-      body: Column(
+      body: SafeArea(
+        child: Column(
         children: [
+          // Закрепленное сообщение
+          if (_pinnedMessage != null)
+            PinnedMessageWidget(
+              pinnedMessage: _pinnedMessage!,
+              onUnpin: _unpinMessage,
+            ),
           // Основной контент
           Expanded(
             child: AnimatedSwitcher(
@@ -412,26 +689,29 @@ class _ChatRouletteScreenState extends State<ChatRouletteScreen>
             MessageInput(
               onSendMessage: _sendMessage,
               onAttach: () {
+                // Fallback для старых версий
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Row(
                       children: [
-                        Icon(Icons.attach_file, color: Colors.white),
-                        SizedBox(width: 8),
-                        Text('Функция скоро появится'),
-                      ],
-                    ),
-                    backgroundColor: AppTheme.darkGray,
-                    behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      Icon(Icons.attach_file, color: Colors.white),
+                      SizedBox(width: 8),
+                      Text('Функция скоро появится'),
+                    ],
                   ),
-                );
-              },
-            ),
+                  backgroundColor: AppTheme.darkGray,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              );
+            },
+              onMediaSelected: _onMediaSelected,
+          ),
             
             // Кнопки управления чатом
           ],
         ],
+        ),
       ),
     );
   }
@@ -735,10 +1015,40 @@ class _ChatRouletteScreenState extends State<ChatRouletteScreen>
     return ListView.builder(
       controller: _scrollController,
       padding: EdgeInsets.only(top: 90, bottom: 16, left: 16, right: 16),
-      itemCount: sortedMessages.length + (_isTyping ? 1 : 0),
+      itemCount: sortedMessages.length + (_isTyping ? 1 : 0) + (_isUploadingMedia ? 1 : 0),
       itemBuilder: (context, index) {
+        // Показать анимацию загрузки медиа
+        if (index == sortedMessages.length && _isUploadingMedia) {
+          // Проверяем, нет ли уже медиа сообщения от текущего пользователя
+          final hasRecentMediaMessage = sortedMessages.any((msg) => 
+            msg.isMine && 
+            msg.mediaType != null && 
+            DateTime.now().difference(msg.timestamp).inSeconds < 5
+          );
+          
+          if (hasRecentMediaMessage) {
+            // Если есть недавнее медиа сообщение, не показываем виджет загрузки
+            return SizedBox.shrink();
+          }
+          
+          return Container(
+            margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Container(
+                  constraints: BoxConstraints(
+                    maxWidth: MediaQuery.of(context).size.width * 0.7,
+                  ),
+                  child: _buildUploadingMediaMessage(),
+                ),
+              ],
+            ),
+          );
+        }
+        
         // Показать индикатор печати в конце списка
-        if (index == sortedMessages.length && _isTyping) {
+        if (index == sortedMessages.length + (_isUploadingMedia ? 1 : 0) && _isTyping) {
           return TypingIndicator();
         }
         
@@ -746,140 +1056,108 @@ class _ChatRouletteScreenState extends State<ChatRouletteScreen>
         final showTimestamp = index == 0 || 
             sortedMessages[index - 1].timestamp.difference(message.timestamp).inMinutes.abs() > 15;
         
-        return _buildMessageBubble(message, showTimestamp);
+        // Выбираем тип виджета в зависимости от типа сообщения
+        if (message.mediaType != null) {
+          return MediaMessageBubble(
+            message: message,
+            showTimestamp: showTimestamp,
+            timestampText: showTimestamp ? _formatTime(message.timestamp) : null,
+            isPinned: _pinnedMessage?.text == message.text,
+            onCopy: () {
+              Clipboard.setData(ClipboardData(text: message.text));
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Сообщение скопировано'),
+                  backgroundColor: AppTheme.toxicYellow,
+                ),
+              );
+            },
+            onDelete: () {
+              // TODO: Реализовать удаление медиа сообщения
+              print('Удалить медиа сообщение');
+            },
+            onDeleteForAll: () {
+              // TODO: Реализовать удаление медиа сообщения для всех
+              print('Удалить медиа сообщение для всех');
+            },
+            onEdit: () {
+              // TODO: Реализовать редактирование медиа сообщения
+              print('Редактировать медиа сообщение');
+            },
+            onReply: () {
+              // TODO: Реализовать ответ на медиа сообщение
+              print('Ответить на медиа сообщение');
+            },
+            onForward: () {
+              // TODO: Реализовать пересылку медиа сообщения
+              print('Переслать медиа сообщение');
+            },
+            onPin: () {
+              if (_pinnedMessage?.text == message.text) {
+                _unpinMessage();
+              } else {
+                _pinMessage(message);
+              }
+            },
+            onReaction: () {
+              // TODO: Реализовать реакцию на медиа сообщение
+              print('Реакция на медиа сообщение');
+            },
+          );
+        } else {
+          return VisibleMessageBubble(
+            message: message,
+            showTimestamp: showTimestamp,
+            timestampText: showTimestamp ? _formatTime(message.timestamp) : null,
+            chatId: _currentChatId ?? '',
+            onMessageVisible: _onMessageVisible,
+            isPinned: _pinnedMessage?.text == message.text,
+            onCopy: () {
+              Clipboard.setData(ClipboardData(text: message.text));
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Сообщение скопировано'),
+                  backgroundColor: AppTheme.toxicYellow,
+                ),
+              );
+            },
+            onDelete: () {
+              // TODO: Реализовать удаление сообщения
+              print('Удалить сообщение');
+            },
+            onDeleteForAll: () {
+              // TODO: Реализовать удаление сообщения для всех
+              print('Удалить сообщение для всех');
+            },
+            onEdit: () {
+              // TODO: Реализовать редактирование сообщения
+              print('Редактировать сообщение');
+            },
+            onReply: () {
+              // TODO: Реализовать ответ на сообщение
+              print('Ответить на сообщение');
+            },
+            onForward: () {
+              // TODO: Реализовать пересылку сообщения
+              print('Переслать сообщение');
+            },
+            onPin: () {
+              if (_pinnedMessage?.text == message.text) {
+                _unpinMessage();
+              } else {
+                _pinMessage(message);
+              }
+            },
+            onReaction: () {
+              // TODO: Реализовать реакцию на сообщение
+              print('Реакция на сообщение');
+            },
+          );
+        }
       },
     );
   }
 
-  Widget _buildMessageBubble(ChatMessage message, bool showTimestamp) {
-    return Container(
-      margin: EdgeInsets.only(bottom: 16),
-      child: Row(
-        mainAxisAlignment: message.isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
-        children: [
-          Flexible(
-            child: Container(
-              constraints: BoxConstraints(maxWidth: 300),
-              child: Stack(
-                children: [
-                  Container(
-                    padding: EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                    decoration: BoxDecoration(
-                      gradient: message.isMine
-                          ? LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [
-                                AppTheme.toxicYellow,
-                                AppTheme.darkYellow,
-                              ],
-                            )
-                          : null,
-                      color: message.isMine ? null : AppTheme.darkGray,
-                      borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(24),
-                        topRight: Radius.circular(24),
-                        bottomLeft: Radius.circular(message.isMine ? 24 : 6),
-                        bottomRight: Radius.circular(message.isMine ? 6 : 24),
-                      ),
-                      border: message.isMine 
-                          ? null 
-                          : Border.all(
-                              color: AppTheme.mediumGray.withValues(alpha: 0.5),
-                              width: 1,
-                            ),
-                      boxShadow: message.isMine
-                          ? [
-                              BoxShadow(
-                                color: AppTheme.toxicYellow.withValues(alpha: 0.2),
-                                blurRadius: 12,
-                                offset: Offset(0, 4),
-                              ),
-                            ]
-                          : [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.1),
-                                blurRadius: 8,
-                                offset: Offset(0, 2),
-                              ),
-                            ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Текст сообщения
-                        Text(
-                          message.text,
-                          style: GoogleFonts.montserrat(
-                            color: message.isMine ? AppTheme.pureBlack : Colors.white,
-                            fontSize: 15,
-                            height: 1.4,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        SizedBox(height: 6),
-                        
-                        // Время отправки
-                        Row(
-                          mainAxisAlignment: message.isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
-                          children: [
-                            Text(
-                              _formatTime(message.timestamp),
-                              style: GoogleFonts.montserrat(
-                                color: message.isMine 
-                                    ? AppTheme.pureBlack.withValues(alpha: 0.7)
-                                    : Colors.grey.shade500,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  
-                  // Галочки статуса прочтения
-                  Positioned(
-                    bottom: 8,
-                    right: message.isMine ? null : 8,
-                    left: message.isMine ? 8 : null,
-                    child: _buildReadStatus(message),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildReadStatus(ChatMessage message) {
-    final isRead = message.isRead;
-    
-    if (message.isMine) {
-      if (!isRead) {
-        return Icon(
-          Icons.check,
-          size: 18,
-          color: Colors.blue,
-        );
-      } else {
-        return Icon(
-          Icons.done_all,
-          size: 18,
-          color: Colors.blue,
-        );
-      }
-    } else {
-      return Icon(
-        Icons.done_all,
-        size: 18,
-        color: Colors.green,
-      );
-    }
-  }
 
   // (удалено) _buildStatusBar — заменён статическим скелетоном
 
@@ -917,9 +1195,9 @@ class _ChatRouletteScreenState extends State<ChatRouletteScreen>
           TextButton(
             onPressed: () => Navigator.pop(context, 'keep'),
             child: Text('Оставить', style: TextStyle(color: Colors.green)),
-          ),
-        ],
-      ),
+                              ),
+                            ],
+                    ),
     );
 
     if (action == 'delete') {
@@ -950,13 +1228,13 @@ class _ChatRouletteScreenState extends State<ChatRouletteScreen>
       // Запускаем анимацию скелетона
       _startSkeletonFlow();
       
-      // Начинаем новый поиск
-      await _startSearch();
+      // Слушатель матчей уже активен из _startSearch()
+      // Дополнительный слушатель не нужен
       
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
-            children: [
+                      children: [
               Icon(Icons.delete, color: Colors.white),
               SizedBox(width: 8),
               Text('Чат удален. Ищем следующего собеседника...'),
@@ -981,6 +1259,7 @@ class _ChatRouletteScreenState extends State<ChatRouletteScreen>
   /// Оставить чат и найти следующего собеседника
   Future<void> _keepChatAndFindNext() async {
     try {
+      // Только завершаем текущий матч, НЕ создаем новый чат
       await _chatRouletteService.findNextPartner();
       
       // Показываем индикатор поиска
@@ -995,13 +1274,13 @@ class _ChatRouletteScreenState extends State<ChatRouletteScreen>
       // Запускаем анимацию скелетона
       _startSkeletonFlow();
       
-      // Начинаем новый поиск
-      await _startSearch();
+      // Слушатель матчей уже активен из _startSearch()
+      // Дополнительный слушатель не нужен
       
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
-            children: [
+                          children: [
               Icon(Icons.save, color: Colors.white),
               SizedBox(width: 8),
               Text('Чат сохранен. Ищем следующего собеседника...'),

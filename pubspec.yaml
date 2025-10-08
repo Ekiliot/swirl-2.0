@@ -64,6 +64,15 @@ dependencies:
   # Animations for Container Transform
   animations: ^2.0.11
 
+  # Visibility detector for message read status
+  visibility_detector: ^0.4.0+2
+
+  # Media handling dependencies
+  image_picker: ^1.0.7 # For media selection
+  
+  # Local storage for pinned messages
+  shared_preferences: ^2.2.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -1,12 +1,14 @@
 // functions/src/index.js
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
+const { Storage } = require('@google-cloud/storage');
 
 // Инициализация Firebase Admin
 admin.initializeApp();
 
 const db = admin.database();
 const firestore = admin.firestore();
+const storage = new Storage();
 
 // Пути в RTDB
 const QUEUE_PATH = 'chat_roulette/queue';
@@ -385,3 +387,113 @@ exports.cleanupOnUserLeave = functions.database
       console.error('Ошибка при очистке данных пользователя:', error);
     }
   });
+
+// Функция для очистки пустых чатов (каждые 7 дней)
+exports.cleanupEmptyChats = functions.pubsub.schedule('0 0 * * 0').timeZone('UTC').onRun(async (context) => {
+  console.log('Запуск очистки пустых чатов...');
+  
+  try {
+    // Получаем все чаты
+    const chatsSnapshot = await admin.firestore().collection(DIRECT_MESSAGES_PATH).get();
+    const emptyChats = [];
+    
+    console.log(`Найдено ${chatsSnapshot.docs.length} чатов для проверки`);
+    
+    // Проверяем каждый чат на наличие сообщений
+    for (const chatDoc of chatsSnapshot.docs) {
+      const chatId = chatDoc.id;
+      const messagesSnapshot = await admin.firestore()
+        .collection(DIRECT_MESSAGES_PATH)
+        .doc(chatId)
+        .collection('messages')
+        .limit(1)
+        .get();
+      
+      // Если нет сообщений, добавляем в список для удаления
+      if (messagesSnapshot.empty) {
+        emptyChats.push(chatId);
+        console.log(`Пустой чат найден: ${chatId}`);
+      }
+    }
+    
+    // Удаляем пустые чаты
+    if (emptyChats.length > 0) {
+      console.log(`Удаляем ${emptyChats.length} пустых чатов...`);
+      
+      const batch = admin.firestore().batch();
+      for (const chatId of emptyChats) {
+        const chatRef = admin.firestore().collection(DIRECT_MESSAGES_PATH).doc(chatId);
+        batch.delete(chatRef);
+      }
+      
+      await batch.commit();
+      console.log(`Успешно удалено ${emptyChats.length} пустых чатов`);
+    } else {
+      console.log('Пустые чаты не найдены');
+    }
+    
+    return { 
+      success: true, 
+      deletedCount: emptyChats.length,
+      message: `Удалено ${emptyChats.length} пустых чатов`
+    };
+  } catch (error) {
+    console.error('Ошибка при очистке пустых чатов:', error);
+    return { 
+      success: false, 
+      error: error.message 
+    };
+  }
+});
+
+/**
+ * Функция для проксирования Storage файлов (решение CORS)
+ */
+exports.proxyStorage = functions.https.onRequest(async (req, res) => {
+  try {
+    // Получаем путь к файлу из URL
+    const filePath = req.path.replace('/storage/', '');
+    
+    if (!filePath) {
+      res.status(400).send('Не указан путь к файлу');
+      return;
+    }
+
+    // Получаем файл из Storage
+    const bucket = storage.bucket('swirl-1856f.firebasestorage.app');
+    const file = bucket.file(filePath);
+    
+    // Проверяем существование файла
+    const [exists] = await file.exists();
+    if (!exists) {
+      res.status(404).send('Файл не найден');
+      return;
+    }
+
+    // Получаем метаданные файла
+    const [metadata] = await file.getMetadata();
+    
+    // Устанавливаем CORS заголовки
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.set('Content-Type', metadata.contentType);
+    res.set('Cache-Control', 'public, max-age=31536000');
+
+    // Создаем поток для чтения файла
+    const stream = file.createReadStream();
+    
+    // Обрабатываем ошибки потока
+    stream.on('error', (error) => {
+      console.error('Ошибка чтения файла:', error);
+      res.status(500).send('Ошибка чтения файла');
+    });
+
+    // Отправляем файл
+    stream.pipe(res);
+    
+  } catch (error) {
+    console.error('Ошибка проксирования Storage:', error);
+    res.status(500).send('Внутренняя ошибка сервера');
+  }
+});

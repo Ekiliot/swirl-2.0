@@ -234,6 +234,10 @@ class ChatRouletteService {
   Future<void> sendMessage({
     required String chatId,
     required String text,
+    String? mediaType,
+    String? mediaUrl,
+    int? mediaSize,
+    int? mediaDuration,
   }) async {
     final userId = _currentUserId;
     if (userId == null) throw StateError('Пользователь не авторизован');
@@ -243,8 +247,16 @@ class ChatRouletteService {
       'senderId': userId,
       'timestamp': FieldValue.serverTimestamp(),
       'isRead': false,
-      'messageType': 'text',
+      'messageType': mediaType ?? 'text',
     };
+
+    // Добавляем медиа данные если есть
+    if (mediaType != null) {
+      messageData['mediaType'] = mediaType;
+      if (mediaUrl != null) messageData['mediaUrl'] = mediaUrl;
+      if (mediaSize != null) messageData['mediaSize'] = mediaSize;
+      if (mediaDuration != null) messageData['mediaDuration'] = mediaDuration;
+    }
 
     await _firestore
         .collection(_directMessagesPath)
@@ -273,6 +285,50 @@ class ChatRouletteService {
     } catch (e) {
       print('Ошибка при удалении чата через Cloud Function: $e');
       throw e;
+    }
+  }
+
+  /// Отметить сообщение как прочитанное
+  Future<void> markMessageAsRead(String chatId, String messageId) async {
+    try {
+      await _firestore
+          .collection(_directMessagesPath)
+          .doc(chatId)
+          .collection('messages')
+          .doc(messageId)
+          .update({'isRead': true});
+      
+      print('ChatRouletteService: Сообщение $messageId отмечено как прочитанное');
+    } catch (e) {
+      print('ChatRouletteService: Ошибка при обновлении статуса прочтения: $e');
+    }
+  }
+
+  /// Отметить все сообщения в чате как прочитанные
+  Future<void> markAllMessagesAsRead(String chatId) async {
+    final userId = _currentUserId;
+    if (userId == null) return;
+
+    try {
+      // Получаем все непрочитанные сообщения от других пользователей
+      final unreadMessages = await _firestore
+          .collection(_directMessagesPath)
+          .doc(chatId)
+          .collection('messages')
+          .where('senderId', isNotEqualTo: userId)
+          .where('isRead', isEqualTo: false)
+          .get();
+
+      // Обновляем каждое сообщение
+      final batch = _firestore.batch();
+      for (final doc in unreadMessages.docs) {
+        batch.update(doc.reference, {'isRead': true});
+      }
+      
+      await batch.commit();
+      print('ChatRouletteService: ${unreadMessages.docs.length} сообщений отмечено как прочитанные');
+    } catch (e) {
+      print('ChatRouletteService: Ошибка при массовом обновлении статуса прочтения: $e');
     }
   }
 
