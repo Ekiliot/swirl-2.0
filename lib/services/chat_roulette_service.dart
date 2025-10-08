@@ -304,6 +304,83 @@ class ChatRouletteService {
     }
   }
 
+  /// Удалить сообщение для всех участников чата
+  Future<void> deleteMessageForAll(String chatId, String messageId) async {
+    final userId = _currentUserId;
+    print('ChatRouletteService: deleteMessageForAll вызван');
+    print('ChatRouletteService: chatId=$chatId, messageId=$messageId, userId=$userId');
+    
+    if (userId == null) {
+      print('ChatRouletteService: Пользователь не авторизован');
+      throw StateError('Пользователь не авторизован');
+    }
+
+    try {
+      print('ChatRouletteService: Получаем сообщение из Firestore...');
+      // Проверяем, что сообщение принадлежит текущему пользователю
+      final messageDoc = await _firestore
+          .collection(_directMessagesPath)
+          .doc(chatId)
+          .collection('messages')
+          .doc(messageId)
+          .get();
+
+      print('ChatRouletteService: Сообщение существует: ${messageDoc.exists}');
+      
+      if (!messageDoc.exists) {
+        print('ChatRouletteService: Сообщение не найдено в Firestore');
+        throw StateError('Сообщение не найдено');
+      }
+
+      final messageData = messageDoc.data()!;
+      print('ChatRouletteService: Данные сообщения: $messageData');
+      print('ChatRouletteService: senderId=${messageData['senderId']}, userId=$userId');
+      
+      if (messageData['senderId'] != userId) {
+        print('ChatRouletteService: Нет прав на удаление - senderId не совпадает');
+        throw StateError('Нет прав на удаление этого сообщения');
+      }
+
+      print('ChatRouletteService: Удаляем сообщение...');
+      // Удаляем сообщение
+      await _firestore
+          .collection(_directMessagesPath)
+          .doc(chatId)
+          .collection('messages')
+          .doc(messageId)
+          .delete();
+
+      print('ChatRouletteService: Сообщение $messageId успешно удалено для всех');
+    } catch (e) {
+      print('ChatRouletteService: Ошибка при удалении сообщения для всех: $e');
+      print('ChatRouletteService: Тип ошибки: ${e.runtimeType}');
+      throw e;
+    }
+  }
+
+  /// Удалить сообщение только для текущего пользователя (скрыть)
+  Future<void> deleteMessageForMe(String chatId, String messageId) async {
+    final userId = _currentUserId;
+    if (userId == null) throw StateError('Пользователь не авторизован');
+
+    try {
+      // Добавляем пользователя в список скрытых сообщений
+      await _firestore
+          .collection(_directMessagesPath)
+          .doc(chatId)
+          .collection('messages')
+          .doc(messageId)
+          .update({
+        'hiddenFor': FieldValue.arrayUnion([userId])
+      });
+
+      print('ChatRouletteService: Сообщение $messageId скрыто для пользователя $userId');
+    } catch (e) {
+      print('ChatRouletteService: Ошибка при скрытии сообщения: $e');
+      throw e;
+    }
+  }
+
   /// Отметить все сообщения в чате как прочитанные
   Future<void> markAllMessagesAsRead(String chatId) async {
     final userId = _currentUserId;

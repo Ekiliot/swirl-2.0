@@ -1,400 +1,173 @@
 import 'package:flutter/material.dart';
-import 'package:super_context_menu/super_context_menu.dart';
-import 'package:super_drag_and_drop/super_drag_and_drop.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/services.dart';
 
-void main() async {
-  runApp(const MainApp());
+void main() {
+  runApp(MyApp());
 }
 
-class Item extends StatelessWidget {
-  const Item({
-    super.key,
-    this.color = Colors.blue,
-    required this.child,
-    this.padding = const EdgeInsets.all(14),
-  });
-
-  final EdgeInsets padding;
-  final Color color;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: padding,
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: DefaultTextStyle(
-        style: const TextStyle(color: Colors.white),
-        child: child,
-      ),
-    );
-  }
-}
-
-class _PageLayout extends StatelessWidget {
-  const _PageLayout({
-    required this.itemZone,
-    required this.dropZone,
-  });
-
-  final Widget itemZone;
-  final Widget dropZone;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, constraints) {
-      return Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Flex(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.max,
-          // textDirection: TextDirection.rtl,
-          direction: constraints.maxWidth > constraints.maxHeight
-              ? Axis.horizontal
-              : Axis.vertical,
-          children: [
-            Expanded(
-              flex: 5,
-              child: itemZone,
-            ),
-            const SizedBox(width: 16, height: 16),
-            Expanded(
-              flex: 2,
-              child: dropZone,
-            ),
-          ],
-        ),
-      );
-    });
-  }
-}
-
-class Section extends StatelessWidget {
-  const Section({
-    super.key,
-    required this.description,
-    required this.child,
-  });
-
-  final Widget description;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.blueGrey.shade50,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: child,
-          ),
-          Padding(
-            padding: const EdgeInsets.all(16.0).copyWith(top: 0),
-            child: description,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _BaseContextMenu extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return ContextMenuWidget(
-      child: const Item(
-        child: Text('Base Context Menu'),
-      ),
-      menuProvider: (_) {
-        return Menu(
-          children: [
-            MenuAction(title: 'Menu Item 1', callback: () {}),
-            MenuAction(title: 'Menu Item 2', callback: () {}),
-            MenuAction(title: 'Menu Item 3', callback: () {}),
-            MenuSeparator(),
-            Menu(title: 'Submenu', children: [
-              MenuAction(title: 'Submenu Item 1', callback: () {}),
-              MenuAction(title: 'Submenu Item 2', callback: () {}),
-              Menu(title: 'Nested Submenu', children: [
-                MenuAction(title: 'Submenu Item 1', callback: () {}),
-                MenuAction(title: 'Submenu Item 2', callback: () {}),
-              ]),
-            ]),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _BaseContextMenuWithDrag extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return DragItemWidget(
-      allowedOperations: () => [DropOperation.copy],
-      dragItemProvider: (_) => DragItem(localData: 'LocalDragData'),
-      child: DraggableWidget(
-        child: ContextMenuWidget(
-          child: const Item(
-            child: Text('Base Context Menu with Drag'),
-          ),
-          menuProvider: (_) {
-            return Menu(
-              children: [
-                MenuAction(title: 'Menu Item 1', callback: () {}),
-                MenuAction(title: 'Menu Item 2', callback: () {}),
-                MenuAction(title: 'Menu Item 3', callback: () {}),
-                MenuSeparator(),
-                Menu(title: 'Submenu', children: [
-                  MenuAction(title: 'Submenu Item 1', callback: () {}),
-                  MenuAction(title: 'Submenu Item 2', callback: () {}),
-                  Menu(title: 'Submenu', children: [
-                    MenuAction(title: 'Submenu Item 1', callback: () {}),
-                    MenuAction(title: 'Submenu Item 2', callback: () {}),
-                  ]),
-                ]),
-              ],
-            );
-          },
-        ),
-      ),
-    );
-  }
-}
-
-class _DeferredMenuPreview extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return DragItemWidget(
-      allowedOperations: () => [DropOperation.copy],
-      dragItemProvider: (_) => DragItem(localData: 'LocalDragData'),
-      child: DraggableWidget(
-        child: ContextMenuWidget(
-          child: const Item(
-            child: Text('Deferred context menu preview'),
-          ),
-          deferredPreviewBuilder: (context, child, cancellationToken) {
-            return DeferredMenuPreview(
-              const Size(200, 150),
-              Future.delayed(
-                const Duration(seconds: 2),
-                () {
-                  return const Item(
-                    color: Colors.blue,
-                    child: Text('Deferred menu preview'),
-                  );
-                },
-              ),
-            );
-          },
-          menuProvider: (_) {
-            return Menu(
-              children: [
-                MenuAction(title: 'Menu Item 1', callback: () {}),
-                MenuAction(title: 'Menu Item 2', callback: () {}),
-                MenuAction(title: 'Menu Item 3', callback: () {}),
-                MenuSeparator(),
-                Menu(title: 'Submenu', children: [
-                  MenuAction(title: 'Submenu Item 1', callback: () {}),
-                  MenuAction(title: 'Submenu Item 2', callback: () {}),
-                  Menu(title: 'Submenu', children: [
-                    MenuAction(title: 'Submenu Item 1', callback: () {}),
-                    MenuAction(title: 'Submenu Item 2', callback: () {}),
-                  ]),
-                ]),
-              ],
-            );
-          },
-        ),
-      ),
-    );
-  }
-}
-
-class _DropZone extends StatefulWidget {
-  const _DropZone();
-
-  @override
-  State<StatefulWidget> createState() => _DropZoneState();
-}
-
-class _DropZoneState extends State<_DropZone> {
-  bool _inside = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return DropRegion(
-      formats: const [], // local data only
-      onDropOver: (event) {
-        return DropOperation.copy;
-      },
-      onDropEnter: (_) {
-        setState(() {
-          _inside = true;
-        });
-      },
-      onDropLeave: (_) {
-        setState(() {
-          _inside = false;
-        });
-      },
-      onPerformDrop: (event) async {},
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(width: 1, color: Colors.blueGrey.shade300),
-          color: _inside ? Colors.blue.shade200 : Colors.transparent,
-        ),
-        alignment: Alignment.center,
-        child: const Text('Drop Zone'),
-      ),
-    );
-  }
-}
-
-class _ComplexContextMenu extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return DragItemWidget(
-      allowedOperations: () => [DropOperation.copy],
-      dragItemProvider: (_) => DragItem(localData: 'LocalDragData'),
-      dragBuilder: (context, child) => const Item(
-        color: Colors.teal,
-        child: Text('Custom Drag preview'),
-      ),
-      child: DraggableWidget(
-        child: ContextMenuWidget(
-          liftBuilder: (context, child) {
-            return Item(
-              color: Colors.red,
-              child: (child as Item).child,
-            );
-          },
-          previewBuilder: (context, child) {
-            return Item(
-              color: Colors.amber.shade600,
-              padding: const EdgeInsets.all(24),
-              child: const Text('Custom menu preview'),
-            );
-          },
-          child: const Item(
-            child: Text('Complex Context Menu'),
-          ),
-          menuProvider: (_) {
-            return Menu(
-              children: [
-                MenuAction(
-                  image: MenuImage.icon(Icons.access_time),
-                  title: 'Menu Item 1',
-                  callback: () {},
-                ),
-                MenuAction(
-                  title: 'Disabled Menu Item',
-                  image: MenuImage.icon(Icons.replay_outlined),
-                  attributes: const MenuActionAttributes(disabled: true),
-                  callback: () {},
-                ),
-                MenuAction(
-                  title: 'Destructive Menu Item',
-                  image: MenuImage.icon(Icons.delete),
-                  attributes: const MenuActionAttributes(destructive: true),
-                  callback: () {},
-                ),
-                MenuSeparator(),
-                Menu(title: 'Submenu', children: [
-                  MenuAction(title: 'Submenu Item 1', callback: () {}),
-                  MenuAction(title: 'Submenu Item 2', callback: () {}),
-                ]),
-                Menu(title: 'Deferred Item Example', children: [
-                  MenuAction(title: 'Leading Item', callback: () {}),
-                  DeferredMenuElement((_) async {
-                    await Future.delayed(const Duration(seconds: 2));
-                    return [
-                      MenuSeparator(),
-                      MenuAction(title: 'Lazily Loaded Item', callback: () {}),
-                      Menu(title: 'Lazily Loaded Submenu', children: [
-                        MenuAction(title: 'Submenu Item 1', callback: () {}),
-                        MenuAction(title: 'Submenu Item 2', callback: () {}),
-                      ]),
-                      MenuSeparator(),
-                    ];
-                  }),
-                  MenuAction(title: 'Trailing Item', callback: () {}),
-                ]),
-                MenuSeparator(),
-                MenuAction(
-                  title: 'Checked Menu Item',
-                  state: MenuActionState.checkOn,
-                  callback: () {},
-                ),
-                MenuAction(
-                  title: 'Menu Item in Mixed State',
-                  state: MenuActionState.checkMixed,
-                  callback: () {},
-                ),
-              ],
-            );
-          },
-        ),
-      ),
-    );
-  }
-}
-
-class _Separator extends StatelessWidget {
-  const _Separator();
-
-  @override
-  Widget build(BuildContext context) {
-    return const SizedBox(height: 16);
-  }
-}
-
-class MainApp extends StatelessWidget {
-  const MainApp({super.key});
-
+class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      home: Scaffold(
-        body: SafeArea(
-          child: _PageLayout(
-            itemZone: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: <Widget>[
-                  Section(
-                    description:
-                        const Text('Base context menu, without drag & drop.'),
-                    child: _BaseContextMenu(),
-                  ),
-                  Section(
-                    description:
-                        const Text('Base context menu, with drag & drop.'),
-                    child: _BaseContextMenuWithDrag(),
-                  ),
-                  Section(
-                    description: const Text(
-                        'Complex context menu, with custom lift, preview and drag builders (mobile only).'),
-                    child: _ComplexContextMenu(),
-                  ),
-                  Section(
-                    description:
-                        const Text('Deferred menu preview (mobile only).'),
-                    child: _DeferredMenuPreview(),
-                  ),
-                ].intersperse(const _Separator()).toList(growable: false),
-              ),
+      title: 'iOS Context Menu Demo',
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+      ),
+      home: IOSStyleMessagesScreen(),
+    );
+  }
+}
+
+class IOSStyleMessagesScreen extends StatefulWidget {
+  @override
+  _IOSStyleMessagesScreenState createState() => _IOSStyleMessagesScreenState();
+}
+
+class _IOSStyleMessagesScreenState extends State<IOSStyleMessagesScreen> {
+  final List<Message> messages = [
+    Message('Привет! Как дела?', true, '10:30'),
+    Message('Отлично, спасибо! А у тебя?', false, '10:32'),
+    Message('Тоже хорошо! Встречаемся сегодня?', true, '10:33'),
+    Message('Да, конечно! В какое время?', false, '10:35'),
+    Message('Давай в 18:00 в обычном месте', true, '10:36'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Color(0xFFF2F2F7),
+      appBar: AppBar(
+        title: Text('Чат', style: TextStyle(color: Colors.black)),
+        backgroundColor: Color(0xFFF2F2F7),
+        elevation: 0,
+        centerTitle: true,
+      ),
+      body: ListView.builder(
+        padding: EdgeInsets.all(16),
+        itemCount: messages.length,
+        itemBuilder: (context, index) {
+          return MessageBubble(
+            message: messages[index],
+            onReply: () => _handleAction('Ответить', messages[index]),
+            onCopy: () => _handleAction('Скопировать', messages[index]),
+            onForward: () => _handleAction('Переслать', messages[index]),
+            onDelete: () => _handleAction('Удалить', messages[index]),
+          );
+        },
+      ),
+    );
+  }
+
+  void _handleAction(String action, Message message) {
+    if (action == 'Скопировать') {
+      Clipboard.setData(ClipboardData(text: message.text));
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('$action: "${message.text}"'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+}
+
+class MessageBubble extends StatelessWidget {
+  final Message message;
+  final VoidCallback onReply;
+  final VoidCallback onCopy;
+  final VoidCallback onForward;
+  final VoidCallback onDelete;
+
+  const MessageBubble({
+    Key? key,
+    required this.message,
+    required this.onReply,
+    required this.onCopy,
+    required this.onForward,
+    required this.onDelete,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: message.isSent ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        margin: EdgeInsets.only(bottom: 8),
+        child: CupertinoContextMenu(
+          actions: [
+            CupertinoContextMenuAction(
+              onPressed: () {
+                Navigator.pop(context);
+                onReply();
+              },
+              trailingIcon: CupertinoIcons.reply,
+              child: Text('Ответить'),
             ),
-            dropZone: const _DropZone(),
+            CupertinoContextMenuAction(
+              onPressed: () {
+                Navigator.pop(context);
+                onCopy();
+              },
+              trailingIcon: CupertinoIcons.doc_on_clipboard,
+              child: Text('Скопировать'),
+            ),
+            CupertinoContextMenuAction(
+              onPressed: () {
+                Navigator.pop(context);
+                onForward();
+              },
+              trailingIcon: CupertinoIcons.arrow_turn_up_right,
+              child: Text('Переслать'),
+            ),
+            CupertinoContextMenuAction(
+              onPressed: () {
+                Navigator.pop(context);
+                onDelete();
+              },
+              isDestructiveAction: true,
+              trailingIcon: CupertinoIcons.delete,
+              child: Text('Удалить'),
+            ),
+          ],
+          child: Container(
+            constraints: BoxConstraints(maxWidth: 250),
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+              color: message.isSent 
+                ? Color(0xFF007AFF)
+                : Colors.white,
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 5,
+                  offset: Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  message.text,
+                  style: TextStyle(
+                    color: message.isSent ? Colors.white : Colors.black,
+                    fontSize: 16,
+                  ),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  message.time,
+                  style: TextStyle(
+                    color: message.isSent 
+                      ? Colors.white.withOpacity(0.7)
+                      : Colors.grey,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -402,15 +175,385 @@ class MainApp extends StatelessWidget {
   }
 }
 
-extension IntersperseExtensions<T> on Iterable<T> {
-  Iterable<T> intersperse(T element) sync* {
-    final iterator = this.iterator;
-    if (iterator.moveNext()) {
-      yield iterator.current;
-      while (iterator.moveNext()) {
-        yield element;
-        yield iterator.current;
-      }
-    }
+// Альтернативный вариант с кастомным контекстным меню
+class CustomContextMenuBubble extends StatefulWidget {
+  final Message message;
+  final VoidCallback onReply;
+  final VoidCallback onCopy;
+  final VoidCallback onForward;
+  final VoidCallback onDelete;
+
+  const CustomContextMenuBubble({
+    Key? key,
+    required this.message,
+    required this.onReply,
+    required this.onCopy,
+    required this.onForward,
+    required this.onDelete,
+  }) : super(key: key);
+
+  @override
+  _CustomContextMenuBubbleState createState() => _CustomContextMenuBubbleState();
+}
+
+class _CustomContextMenuBubbleState extends State<CustomContextMenuBubble> 
+    with SingleTickerProviderStateMixin {
+  OverlayEntry? _overlayEntry;
+  late AnimationController _animationController;
+  late Animation<double> _scaleAnimation;
+  late Animation<double> _opacityAnimation;
+  Offset _tapPosition = Offset.zero;
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      duration: Duration(milliseconds: 200),
+      vsync: this,
+    );
+    _scaleAnimation = Tween<double>(
+      begin: 0.8,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeOutBack,
+    ));
+    _opacityAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeOut,
+    ));
   }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  void _showContextMenu(BuildContext context) {
+    HapticFeedback.mediumImpact();
+    
+    _overlayEntry = OverlayEntry(
+      builder: (context) => GestureDetector(
+        onTap: _hideContextMenu,
+        child: Container(
+          color: Colors.black.withOpacity(0.4),
+          child: Stack(
+            children: [
+              Positioned(
+                left: _tapPosition.dx - 100,
+                top: _tapPosition.dy - 200,
+                child: AnimatedBuilder(
+                  animation: _animationController,
+                  builder: (context, child) {
+                    return Transform.scale(
+                      scale: _scaleAnimation.value,
+                      child: Opacity(
+                        opacity: _opacityAnimation.value,
+                        child: Container(
+                          width: 200,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(14),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.2),
+                                blurRadius: 20,
+                                offset: Offset(0, 10),
+                              ),
+                            ],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(14),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _buildMenuItem(
+                                  icon: CupertinoIcons.reply,
+                                  label: 'Ответить',
+                                  onTap: () {
+                                    _hideContextMenu();
+                                    widget.onReply();
+                                  },
+                                ),
+                                _buildDivider(),
+                                _buildMenuItem(
+                                  icon: CupertinoIcons.doc_on_clipboard,
+                                  label: 'Скопировать',
+                                  onTap: () {
+                                    _hideContextMenu();
+                                    widget.onCopy();
+                                  },
+                                ),
+                                _buildDivider(),
+                                _buildMenuItem(
+                                  icon: CupertinoIcons.arrow_turn_up_right,
+                                  label: 'Переслать',
+                                  onTap: () {
+                                    _hideContextMenu();
+                                    widget.onForward();
+                                  },
+                                ),
+                                _buildDivider(),
+                                _buildMenuItem(
+                                  icon: CupertinoIcons.delete,
+                                  label: 'Удалить',
+                                  color: Colors.red,
+                                  onTap: () {
+                                    _hideContextMenu();
+                                    widget.onDelete();
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    Overlay.of(context).insert(_overlayEntry!);
+    _animationController.forward();
+  }
+
+  void _hideContextMenu() {
+    _animationController.reverse().then((_) {
+      _overlayEntry?.remove();
+      _overlayEntry = null;
+    });
+  }
+
+  Widget _buildMenuItem({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    Color color = Colors.black,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              Icon(icon, size: 20, color: color),
+              SizedBox(width: 12),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 16,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDivider() {
+    return Container(
+      height: 0.5,
+      color: Colors.grey.withOpacity(0.3),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onLongPressStart: (details) {
+        setState(() {
+          _tapPosition = details.globalPosition;
+        });
+        _showContextMenu(context);
+      },
+      child: Align(
+        alignment: widget.message.isSent 
+          ? Alignment.centerRight 
+          : Alignment.centerLeft,
+        child: Container(
+          margin: EdgeInsets.only(bottom: 8),
+          constraints: BoxConstraints(maxWidth: 250),
+          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(
+            color: widget.message.isSent 
+              ? Color(0xFF007AFF)
+              : Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 5,
+                offset: Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                widget.message.text,
+                style: TextStyle(
+                  color: widget.message.isSent ? Colors.white : Colors.black,
+                  fontSize: 16,
+                ),
+              ),
+              SizedBox(height: 4),
+              Text(
+                widget.message.time,
+                style: TextStyle(
+                  color: widget.message.isSent 
+                    ? Colors.white.withOpacity(0.7)
+                    : Colors.grey,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Простой вариант с PopupMenuButton
+class SimpleContextMenuBubble extends StatelessWidget {
+  final Message message;
+  final VoidCallback onReply;
+  final VoidCallback onCopy;
+  final VoidCallback onForward;
+  final VoidCallback onDelete;
+
+  const SimpleContextMenuBubble({
+    Key? key,
+    required this.message,
+    required this.onReply,
+    required this.onCopy,
+    required this.onForward,
+    required this.onDelete,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: message.isSent ? Alignment.centerRight : Alignment.centerLeft,
+      child: GestureDetector(
+        onLongPress: () {
+          HapticFeedback.mediumImpact();
+          final RenderBox overlay = 
+              Overlay.of(context).context.findRenderObject() as RenderBox;
+          
+          showMenu(
+            context: context,
+            position: RelativeRect.fromLTRB(100, 200, 100, 200),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            items: [
+              PopupMenuItem(
+                onTap: onReply,
+                child: Row(
+                  children: [
+                    Icon(CupertinoIcons.reply, size: 20),
+                    SizedBox(width: 12),
+                    Text('Ответить'),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                onTap: onCopy,
+                child: Row(
+                  children: [
+                    Icon(CupertinoIcons.doc_on_clipboard, size: 20),
+                    SizedBox(width: 12),
+                    Text('Скопировать'),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                onTap: onForward,
+                child: Row(
+                  children: [
+                    Icon(CupertinoIcons.arrow_turn_up_right, size: 20),
+                    SizedBox(width: 12),
+                    Text('Переслать'),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                onTap: onDelete,
+                child: Row(
+                  children: [
+                    Icon(CupertinoIcons.delete, size: 20, color: Colors.red),
+                    SizedBox(width: 12),
+                    Text('Удалить', style: TextStyle(color: Colors.red)),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
+        child: Container(
+          margin: EdgeInsets.only(bottom: 8),
+          constraints: BoxConstraints(maxWidth: 250),
+          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(
+            color: message.isSent 
+              ? Color(0xFF007AFF)
+              : Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 5,
+                offset: Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                message.text,
+                style: TextStyle(
+                  color: message.isSent ? Colors.white : Colors.black,
+                  fontSize: 16,
+                ),
+              ),
+              SizedBox(height: 4),
+              Text(
+                message.time,
+                style: TextStyle(
+                  color: message.isSent 
+                    ? Colors.white.withOpacity(0.7)
+                    : Colors.grey,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class Message {
+  final String text;
+  final bool isSent;
+  final String time;
+
+  Message(this.text, this.isSent, this.time);
 }

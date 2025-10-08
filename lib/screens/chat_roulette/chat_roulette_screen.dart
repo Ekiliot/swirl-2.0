@@ -463,11 +463,15 @@ class _ChatRouletteScreenState extends State<ChatRouletteScreen>
               timestamp = DateTime.now();
             }
             
+            final messageId = data['id'] as String?;
+            print('Создаем ChatMessage: text=${data['text']}, messageId=$messageId, senderId=${data['senderId']}');
+            
             return ChatMessage(
               text: data['text'] as String? ?? '',
               isMine: data['senderId'] == FirebaseAuth.instance.currentUser?.uid,
               timestamp: timestamp,
               isRead: data['isRead'] as bool? ?? false,
+              messageId: messageId,
               mediaType: data['mediaType'] as String?,
               mediaUrl: data['mediaUrl'] as String?,
               mediaSize: data['mediaSize'] as int?,
@@ -1072,13 +1076,61 @@ class _ChatRouletteScreenState extends State<ChatRouletteScreen>
                 ),
               );
             },
-            onDelete: () {
-              // TODO: Реализовать удаление медиа сообщения
-              print('Удалить медиа сообщение');
+            onDelete: () async {
+              if (message.messageId != null && _currentChatId != null) {
+                try {
+                  await _chatRouletteService.deleteMessageForMe(_currentChatId!, message.messageId!);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Сообщение скрыто'),
+                      backgroundColor: AppTheme.toxicYellow,
+                    ),
+                  );
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Ошибка при скрытии сообщения'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
             },
-            onDeleteForAll: () {
-              // TODO: Реализовать удаление медиа сообщения для всех
-              print('Удалить медиа сообщение для всех');
+            onDeleteForAll: () async {
+              print('onDeleteForAll вызван для медиа сообщения: ${message.text}');
+              print('messageId: ${message.messageId}');
+              print('currentChatId: $_currentChatId');
+              
+              if (message.messageId != null && _currentChatId != null) {
+                try {
+                  print('Пытаемся удалить медиа сообщение ${message.messageId} из чата $_currentChatId');
+                  await _chatRouletteService.deleteMessageForAll(_currentChatId!, message.messageId!);
+                  print('Медиа сообщение успешно удалено');
+                  
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Сообщение удалено для всех'),
+                      backgroundColor: AppTheme.toxicYellow,
+                    ),
+                  );
+                } catch (e) {
+                  print('Ошибка при удалении медиа сообщения: $e');
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Ошибка при удалении сообщения: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              } else {
+                print('Не удалось удалить медиа сообщение: messageId=${message.messageId}, chatId=$_currentChatId');
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Ошибка: отсутствует ID сообщения или чата'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
             },
             onEdit: () {
               // TODO: Реализовать редактирование медиа сообщения
@@ -1121,13 +1173,61 @@ class _ChatRouletteScreenState extends State<ChatRouletteScreen>
                 ),
               );
             },
-            onDelete: () {
-              // TODO: Реализовать удаление сообщения
-              print('Удалить сообщение');
+            onDelete: () async {
+              if (message.messageId != null && _currentChatId != null) {
+                try {
+                  await _chatRouletteService.deleteMessageForMe(_currentChatId!, message.messageId!);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Сообщение скрыто'),
+                      backgroundColor: AppTheme.toxicYellow,
+                    ),
+                  );
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Ошибка при скрытии сообщения'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
             },
-            onDeleteForAll: () {
-              // TODO: Реализовать удаление сообщения для всех
-              print('Удалить сообщение для всех');
+            onDeleteForAll: () async {
+              print('onDeleteForAll вызван для медиа сообщения: ${message.text}');
+              print('messageId: ${message.messageId}');
+              print('currentChatId: $_currentChatId');
+              
+              if (message.messageId != null && _currentChatId != null) {
+                try {
+                  print('Пытаемся удалить медиа сообщение ${message.messageId} из чата $_currentChatId');
+                  await _chatRouletteService.deleteMessageForAll(_currentChatId!, message.messageId!);
+                  print('Медиа сообщение успешно удалено');
+                  
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Сообщение удалено для всех'),
+                      backgroundColor: AppTheme.toxicYellow,
+                    ),
+                  );
+                } catch (e) {
+                  print('Ошибка при удалении медиа сообщения: $e');
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Ошибка при удалении сообщения: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              } else {
+                print('Не удалось удалить медиа сообщение: messageId=${message.messageId}, chatId=$_currentChatId');
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Ошибка: отсутствует ID сообщения или чата'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
             },
             onEdit: () {
               // TODO: Реализовать редактирование сообщения
@@ -1195,9 +1295,9 @@ class _ChatRouletteScreenState extends State<ChatRouletteScreen>
           TextButton(
             onPressed: () => Navigator.pop(context, 'keep'),
             child: Text('Оставить', style: TextStyle(color: Colors.green)),
-                              ),
-                            ],
-                    ),
+                            ),
+                          ],
+                        ),
     );
 
     if (action == 'delete') {
