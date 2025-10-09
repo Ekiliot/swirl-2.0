@@ -11,6 +11,11 @@ class ChatMessage {
   final bool isEdited; // редактировано ли сообщение
   final String? messageId; // ID сообщения для операций
   
+  // Поля для ответов
+  final String? replyToMessageId; // ID сообщения, на которое отвечаем
+  final String? replyToText; // Текст сообщения, на которое отвечаем
+  final String? replyToSenderId; // ID отправителя сообщения, на которое отвечаем
+  
   // Медиа поля
   final String? mediaUrl;
   final String? mediaType; // 'photo' или 'video'
@@ -32,6 +37,9 @@ class ChatMessage {
     this.isPinned = false,
     this.isEdited = false,
     this.messageId,
+    this.replyToMessageId,
+    this.replyToText,
+    this.replyToSenderId,
     this.mediaUrl,
     this.mediaType,
     this.mediaSize,
@@ -53,6 +61,9 @@ class ChatMessage {
     bool? isPinned,
     bool? isEdited,
     String? messageId,
+    String? replyToMessageId,
+    String? replyToText,
+    String? replyToSenderId,
     String? mediaUrl,
     String? mediaType,
     int? mediaSize,
@@ -73,6 +84,9 @@ class ChatMessage {
       isPinned: isPinned ?? this.isPinned,
       isEdited: isEdited ?? this.isEdited,
       messageId: messageId ?? this.messageId,
+      replyToMessageId: replyToMessageId ?? this.replyToMessageId,
+      replyToText: replyToText ?? this.replyToText,
+      replyToSenderId: replyToSenderId ?? this.replyToSenderId,
       mediaUrl: mediaUrl ?? this.mediaUrl,
       mediaType: mediaType ?? this.mediaType,
       mediaSize: mediaSize ?? this.mediaSize,
@@ -97,6 +111,9 @@ class ChatMessage {
       'isPinned': isPinned,
       'isEdited': isEdited,
       'messageId': messageId,
+      'replyToMessageId': replyToMessageId,
+      'replyToText': replyToText,
+      'replyToSenderId': replyToSenderId,
       'mediaUrl': mediaUrl,
       'mediaType': mediaType,
       'mediaSize': mediaSize,
@@ -121,6 +138,9 @@ class ChatMessage {
       isPinned: json['isPinned'] ?? false,
       isEdited: json['isEdited'] ?? false,
       messageId: json['messageId'],
+      replyToMessageId: json['replyToMessageId'],
+      replyToText: json['replyToText'],
+      replyToSenderId: json['replyToSenderId'],
       mediaUrl: json['mediaUrl'],
       mediaType: json['mediaType'],
       mediaSize: json['mediaSize'],

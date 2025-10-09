@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:eva_icons_flutter/eva_icons_flutter.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/user_activity_status.dart';
 
 class ProfileSettingsSection extends StatelessWidget {
   const ProfileSettingsSection({super.key});
@@ -35,6 +36,12 @@ class ProfileSettingsSection extends StatelessWidget {
             () {},
           ),
           _buildSettingItem(
+            EvaIcons.clockOutline,
+            'Статус активности',
+            'Точное время',
+            () => _showActivityPrivacySettings(context),
+          ),
+          _buildSettingItem(
             EvaIcons.lock,
             'Приватность',
             'Публичный',
@@ -47,6 +54,61 @@ class ProfileSettingsSection extends StatelessWidget {
             () {},
           ),
         ],
+      ),
+    );
+  }
+
+  /// Показать настройки приватности статуса активности
+  void _showActivityPrivacySettings(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.pureBlack,
+      isScrollControlled: true,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Container(
+        padding: EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Заголовок
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Настройки приватности',
+                  style: GoogleFonts.montserrat(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: Container(
+                    padding: EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.darkGray,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      EvaIcons.close,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 20),
+            
+            // Настройки приватности
+            ActivityPrivacySettings(),
+            
+            SizedBox(height: 20),
+          ],
+        ),
       ),
     );
   }

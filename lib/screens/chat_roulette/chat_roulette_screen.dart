@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:eva_icons_flutter/eva_icons_flutter.dart';
 import 'dart:ui';
 import 'dart:async';
 import 'dart:typed_data';
@@ -8,6 +9,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../theme/app_theme.dart';
 import '../../services/chat_roulette_service.dart';
+import '../../services/chat_service.dart';
 import '../../services/pinned_messages_service.dart';
 import '../chat/widgets/chat_header.dart';
 import '../chat/widgets/visible_message_bubble.dart';
@@ -66,13 +68,20 @@ class _ChatRouletteScreenState extends State<ChatRouletteScreen>
   // Закрепленное сообщение
   ChatMessage? _pinnedMessage;
   
+  // Состояние для ответа на сообщение
+  ChatMessage? _replyingToMessage;
+  
   // Данные текущего матча
   String? _currentPartner;
+  String? _currentPartnerId; // ID партнера для отображения статуса
   String? _currentAvatar;
   String? _currentChatId;
   
   // Сервис чат-рулетки
   final ChatRouletteService _chatRouletteService = ChatRouletteService.instance;
+  
+  // Сервис для сохраненных чатов
+  final ChatService _chatService = ChatService();
 
   @override
   void initState() {
@@ -152,8 +161,10 @@ class _ChatRouletteScreenState extends State<ChatRouletteScreen>
       }
     } catch (e) {
       print('Ошибка инициализации чат-рулетки: $e');
-      // В случае ошибки показываем демо-данные
-      _startDemoSearch();
+      // В случае ошибки показываем пустой экран
+          setState(() {
+            _isSearching = false;
+      });
     }
   }
 
@@ -161,12 +172,12 @@ class _ChatRouletteScreenState extends State<ChatRouletteScreen>
   Future<void> _startSearch() async {
     try {
       // Получаем данные пользователя из профиля
-      // Здесь нужно будет интегрировать с ProfileService
+      // TODO: Интегрировать с ProfileService для получения реальных данных
       await _chatRouletteService.joinSearchQueue(
-        name: 'Пользователь', // Временно, нужно получить из профиля
-        age: 25, // Временно, нужно получить из профиля
-        gender: 'Мужской', // Временно, нужно получить из профиля
-        interests: ['Музыка', 'Спорт'], // Временно, нужно получить из профиля
+        name: 'Пользователь',
+        age: 25,
+        gender: 'Мужской',
+        interests: ['Музыка', 'Спорт'],
       );
 
         // Слушаем матчи напрямую
@@ -191,7 +202,10 @@ class _ChatRouletteScreenState extends State<ChatRouletteScreen>
         });
     } catch (e) {
       print('Ошибка при начале поиска: $e');
-      _startDemoSearch();
+      // В случае ошибки показываем пустой экран
+      setState(() {
+        _isSearching = false;
+      });
     }
   }
 
@@ -219,7 +233,10 @@ class _ChatRouletteScreenState extends State<ChatRouletteScreen>
       }
     } catch (e) {
       print('Ошибка загрузки матча: $e');
-      _startDemoSearch();
+      // В случае ошибки показываем пустой экран
+      setState(() {
+        _isSearching = false;
+      });
     }
   }
 
@@ -243,7 +260,7 @@ class _ChatRouletteScreenState extends State<ChatRouletteScreen>
   /// Закрепление сообщения
   void _pinMessage(ChatMessage message) async {
     try {
-      final success = await PinnedMessagesService.pinMessage(message);
+      final success = await PinnedMessagesService.pinMessage(_currentChatId!, message);
       if (success) {
         setState(() {
           _pinnedMessage = message;
@@ -261,7 +278,7 @@ class _ChatRouletteScreenState extends State<ChatRouletteScreen>
   void _unpinMessage() async {
     try {
       if (_pinnedMessage != null) {
-        final success = await PinnedMessagesService.unpinMessage(_pinnedMessage!);
+        final success = await PinnedMessagesService.unpinMessage(_currentChatId!, _pinnedMessage!);
         if (success) {
           setState(() {
             _pinnedMessage = null;
@@ -276,10 +293,51 @@ class _ChatRouletteScreenState extends State<ChatRouletteScreen>
     }
   }
 
+  /// Начать ответ на сообщение
+  void _startReply(ChatMessage message) {
+    setState(() {
+      _replyingToMessage = message;
+    });
+    print('Начинаем ответ на сообщение: ${message.text}');
+  }
+
+  /// Отменить ответ на сообщение
+  void _cancelReply() {
+    setState(() {
+      _replyingToMessage = null;
+    });
+    print('Отменяем ответ на сообщение');
+  }
+
+  /// Получить текст для отображения в ответе
+  String _getReplyText(ChatMessage message) {
+    // Если это медиа сообщение
+    if (message.mediaType != null) {
+      switch (message.mediaType) {
+        case 'photo':
+          return '📷 Фото';
+        case 'video':
+          return '🎥 Видео';
+        default:
+          return '📎 Медиа';
+      }
+    }
+    
+    // Если есть текст, обрезаем его
+    if (message.text.isNotEmpty) {
+      if (message.text.length > 50) {
+        return '${message.text.substring(0, 50)}...';
+      }
+      return message.text;
+    }
+    
+    return 'Сообщение';
+  }
+
   /// Загрузка закрепленных сообщений из локального хранилища
   void _loadPinnedMessages() async {
     try {
-      final pinnedMessages = await PinnedMessagesService.getPinnedMessages();
+      final pinnedMessages = await PinnedMessagesService.getPinnedMessages(_currentChatId!);
       if (pinnedMessages.isNotEmpty) {
         setState(() {
           _pinnedMessage = pinnedMessages.first; // Показываем только первое закрепленное сообщение
@@ -394,12 +452,12 @@ class _ChatRouletteScreenState extends State<ChatRouletteScreen>
         _mediaThumbnail = mediaData['thumbnailData'];
       });
 
-      // Не создаем временное сообщение - показываем только виджет загрузки
+      // Показываем только виджет загрузки
 
       // Симулируем прогресс загрузки
       for (int i = 0; i <= 100; i += 10) {
         await Future.delayed(const Duration(milliseconds: 100));
-        setState(() {
+    setState(() {
           _mediaUploadProgress = i / 100.0;
         });
       }
@@ -445,11 +503,55 @@ class _ChatRouletteScreenState extends State<ChatRouletteScreen>
     }
   }
 
+  /// Загрузить информацию о чате для определения партнера
+  void _loadChatInfo() {
+    if (_currentChatId == null) return;
+
+    try {
+      if (widget.isSavedChat) {
+        // Для сохраненных чатов получаем информацию из ChatService
+        // Сначала получаем данные чата, затем информацию о партнере
+        FirebaseFirestore.instance
+            .collection('direct_messages')
+            .doc(_currentChatId!)
+            .get()
+            .then((chatDoc) {
+          if (chatDoc.exists && mounted) {
+            final chatData = chatDoc.data() as Map<String, dynamic>;
+            final partnerInfo = _chatService.getPartnerInfo(chatData);
+            if (partnerInfo != null) {
+              setState(() {
+                _currentPartnerId = partnerInfo['id'] as String?;
+              });
+            }
+          }
+        });
+      } else {
+        // Для чат-рулетки получаем информацию из ChatRouletteService
+        // В чат-рулетке ID партнера можно получить из match данных
+        // Пока что оставляем null, так как в чат-рулетке это сложнее
+        setState(() {
+          _currentPartnerId = null;
+        });
+      }
+    } catch (e) {
+      print('Ошибка загрузки информации о чате: $e');
+    }
+  }
+
   /// Загрузить сообщения чата
   void _loadChatMessages() {
     if (_currentChatId == null) return;
 
-    _chatRouletteService.getChatMessages(_currentChatId!).listen((messages) {
+    // Получаем информацию о чате для определения партнера
+    _loadChatInfo();
+
+    // Используем правильный сервис в зависимости от типа чата
+    final messagesStream = widget.isSavedChat 
+        ? _chatService.getChatMessages(_currentChatId!)
+        : _chatRouletteService.getChatMessages(_currentChatId!);
+
+    messagesStream.listen((messages) {
       if (mounted) {
         setState(() {
           _messages = messages.map((data) {
@@ -472,6 +574,9 @@ class _ChatRouletteScreenState extends State<ChatRouletteScreen>
               timestamp: timestamp,
               isRead: data['isRead'] as bool? ?? false,
               messageId: messageId,
+              replyToMessageId: data['replyToMessageId'] as String?,
+              replyToText: data['replyToText'] as String?,
+              replyToSenderId: data['replyToSenderId'] as String?,
               mediaType: data['mediaType'] as String?,
               mediaUrl: data['mediaUrl'] as String?,
               mediaSize: data['mediaSize'] as int?,
@@ -480,89 +585,58 @@ class _ChatRouletteScreenState extends State<ChatRouletteScreen>
           }).toList();
           
           // Прокрутка к концу после загрузки сообщений
-          Future.delayed(Duration(milliseconds: 100), () {
-            if (_scrollController.hasClients) {
-              _scrollController.animateTo(
-                _scrollController.position.maxScrollExtent,
-                duration: Duration(milliseconds: 300),
-                curve: Curves.easeOut,
-              );
-            }
-          });
+        Future.delayed(Duration(milliseconds: 100), () {
+          if (_scrollController.hasClients) {
+            _scrollController.animateTo(
+              _scrollController.position.maxScrollExtent,
+              duration: Duration(milliseconds: 300),
+              curve: Curves.easeOut,
+            );
+          }
         });
-      }
-    });
+            });
+          }
+        });
   }
 
-  /// Демо-поиск (для отладки)
-  void _startDemoSearch() {
-    Future.delayed(Duration(seconds: 3), () {
-      if (mounted) {
-        // Останавливаем анимацию скелетона
-        _skeletonTimer?.cancel();
-        
-          setState(() {
-            _isSearching = false;
-          _currentPartner = 'Анна';
-          _currentAvatar = 'А';
-          // Очищаем скелетоны при переходе к чату
-          _skeletonCount = 0;
-            _loadDemoMessages();
-        });
-      }
-    });
-  }
 
-  void _loadDemoMessages() {
-    _messages = [
-      ChatMessage(
-        text: 'Привет! 👋',
-        isMine: false,
-        timestamp: DateTime.now().subtract(Duration(minutes: 2)),
-      ),
-      ChatMessage(
-        text: 'Привет! Как дела?',
-        isMine: true,
-        timestamp: DateTime.now().subtract(Duration(minutes: 1)),
-        isRead: true,
-      ),
-    ];
-  }
 
   void _sendMessage(String messageText) {
     if (messageText.trim().isEmpty) return;
 
     // Если есть активный чат, отправляем сообщение через сервис
     if (_currentChatId != null) {
-      _chatRouletteService.sendMessage(
-        chatId: _currentChatId!,
-        text: messageText.trim(),
-      );
-    } else {
-      // Демо-режим
-    setState(() {
-      _messages.add(ChatMessage(
-        text: messageText.trim(),
-        isMine: true,
-        timestamp: DateTime.now(),
-        isRead: false,
-      ));
-    });
-
-    // Имитация набора текста
-    setState(() => _isTyping = true);
-    Future.delayed(Duration(seconds: 2), () {
-      if (mounted) {
-        setState(() {
-          _isTyping = false;
-          _messages.add(ChatMessage(
-            text: 'Отлично! 😊',
-            isMine: false,
-            timestamp: DateTime.now(),
-          ));
-        });
-        }
-      });
+      // Используем правильный сервис в зависимости от типа чата
+      if (widget.isSavedChat) {
+        _chatService.sendMessage(
+          chatId: _currentChatId!,
+          text: messageText.trim(),
+          replyToMessageId: _replyingToMessage?.messageId,
+          replyToText: _replyingToMessage?.text,
+          replyToSenderId: _replyingToMessage?.isMine == true 
+              ? FirebaseAuth.instance.currentUser?.uid 
+              : _replyingToMessage?.isMine == false 
+                  ? null // TODO: Получить реальный ID собеседника
+                  : null,
+        );
+      } else {
+        _chatRouletteService.sendMessage(
+          chatId: _currentChatId!,
+          text: messageText.trim(),
+          replyToMessageId: _replyingToMessage?.messageId,
+          replyToText: _replyingToMessage?.text,
+          replyToSenderId: _replyingToMessage?.isMine == true 
+              ? FirebaseAuth.instance.currentUser?.uid 
+              : _replyingToMessage?.isMine == false 
+                  ? null // TODO: Получить реальный ID собеседника
+                  : null,
+        );
+      }
+      
+      // Отменяем ответ после отправки
+      if (_replyingToMessage != null) {
+        _cancelReply();
+      }
     }
         
     // Прокрутка вниз после отправки
@@ -603,6 +677,7 @@ class _ChatRouletteScreenState extends State<ChatRouletteScreen>
         userName: _currentPartner ?? 'Неизвестно',
         userAvatar: _currentAvatar ?? '?',
         isTyping: _isTyping,
+        partnerUserId: _currentPartnerId,
         onBack: () async {
           if (widget.isSavedChat) {
             // Для сохраненных чатов просто выходим
@@ -668,6 +743,99 @@ class _ChatRouletteScreenState extends State<ChatRouletteScreen>
             PinnedMessageWidget(
               pinnedMessage: _pinnedMessage!,
               onUnpin: _unpinMessage,
+            ),
+          
+          // Сообщение для ответа
+          if (_replyingToMessage != null)
+            Container(
+              margin: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: _cancelReply,
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.toxicYellow.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: AppTheme.toxicYellow.withOpacity(0.3),
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        // Иконка ответа
+                        Container(
+                          padding: EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: AppTheme.toxicYellow.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Icon(
+                            EvaIcons.messageCircleOutline,
+                            color: AppTheme.toxicYellow,
+                            size: 16,
+                          ),
+                        ),
+                        
+                        SizedBox(width: 8),
+                        
+                        // Контент ответа
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Имя отправителя
+                              Text(
+                                _replyingToMessage!.isMine ? 'Вы' : 'Собеседник',
+                                style: GoogleFonts.montserrat(
+                                  color: AppTheme.toxicYellow,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              
+                              SizedBox(height: 2),
+                              
+                              // Текст сообщения
+                              Text(
+                                _getReplyText(_replyingToMessage!),
+                                style: GoogleFonts.montserrat(
+                                  color: Colors.white.withOpacity(0.8),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        
+                        // Кнопка отмены
+                        GestureDetector(
+                          onTap: _cancelReply,
+                          child: Container(
+                            padding: EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: Colors.red.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Icon(
+                              EvaIcons.close,
+                              color: Colors.red,
+                              size: 16,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
             ),
           // Основной контент
           Expanded(
@@ -1137,8 +1305,7 @@ class _ChatRouletteScreenState extends State<ChatRouletteScreen>
               print('Редактировать медиа сообщение');
             },
             onReply: () {
-              // TODO: Реализовать ответ на медиа сообщение
-              print('Ответить на медиа сообщение');
+              _startReply(message);
             },
             onForward: () {
               // TODO: Реализовать пересылку медиа сообщения
@@ -1234,8 +1401,7 @@ class _ChatRouletteScreenState extends State<ChatRouletteScreen>
               print('Редактировать сообщение');
             },
             onReply: () {
-              // TODO: Реализовать ответ на сообщение
-              print('Ответить на сообщение');
+              _startReply(message);
             },
             onForward: () {
               // TODO: Реализовать пересылку сообщения

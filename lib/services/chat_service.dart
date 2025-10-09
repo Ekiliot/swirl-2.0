@@ -106,6 +106,9 @@ class ChatService {
   Future<void> sendMessage({
     required String chatId,
     required String text,
+    String? replyToMessageId,
+    String? replyToText,
+    String? replyToSenderId,
   }) async {
     final userId = _auth.currentUser?.uid;
     if (userId == null) throw StateError('Пользователь не авторизован');
@@ -117,6 +120,13 @@ class ChatService {
       'isRead': false,
       'messageType': 'text',
     };
+
+    // Добавляем данные ответа если есть
+    if (replyToMessageId != null) {
+      messageData['replyToMessageId'] = replyToMessageId;
+      if (replyToText != null) messageData['replyToText'] = replyToText;
+      if (replyToSenderId != null) messageData['replyToSenderId'] = replyToSenderId;
+    }
 
     await _firestore
         .collection(_directMessagesPath)

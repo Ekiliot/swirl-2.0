@@ -8,11 +8,17 @@ import 'theme/app_theme.dart';
 import 'screens/auth/welcome_screen.dart';
 import 'screens/main/main_screen.dart';
 import 'services/auth_service.dart';
+import 'services/user_activity_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Настройка системной навигационной панели
+  // Настройка системной навигационной панели - скрываем её полностью
+  SystemChrome.setEnabledSystemUIMode(
+    SystemUiMode.immersiveSticky,
+    overlays: [SystemUiOverlay.top], // Показываем только статус бар
+  );
+  
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -34,6 +40,9 @@ void main() async {
   
   // Инициализация SharedPreferences
   await SharedPreferences.getInstance();
+  
+  // Инициализация сервиса активности пользователей
+  await UserActivityService().initialize();
   
   runApp(const MyApp());
 }

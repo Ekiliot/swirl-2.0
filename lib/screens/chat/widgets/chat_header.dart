@@ -3,11 +3,13 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:eva_icons_flutter/eva_icons_flutter.dart';
 import 'dart:ui';
 import '../../../theme/app_theme.dart';
+import '../../../widgets/user_activity_status.dart';
 
 class ChatHeader extends StatelessWidget implements PreferredSizeWidget {
   final String userName;
   final String userAvatar;
   final bool isTyping;
+  final String? partnerUserId; // ID собеседника для отображения статуса
   final VoidCallback onBack;
   final VoidCallback? onMenu;
 
@@ -16,6 +18,7 @@ class ChatHeader extends StatelessWidget implements PreferredSizeWidget {
     required this.userName,
     required this.userAvatar,
     required this.isTyping,
+    this.partnerUserId,
     required this.onBack,
     this.onMenu,
   });
@@ -177,34 +180,69 @@ class ChatHeader extends StatelessWidget implements PreferredSizeWidget {
         // Статус с анимацией
         Row(
           children: [
-            // Индикатор онлайн
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                color: isTyping ? AppTheme.toxicYellow : Colors.green,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: (isTyping ? AppTheme.toxicYellow : Colors.green).withValues(alpha: 0.5),
-                    blurRadius: 8,
-                    spreadRadius: 2,
-                  ),
-                ],
+            if (isTyping) ...[
+              // Индикатор печати
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: AppTheme.toxicYellow,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.toxicYellow.withValues(alpha: 0.5),
+                      blurRadius: 8,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
               ),
-            ),
-            SizedBox(width: 6),
-            
-            // Текст статуса
-            Text(
-              isTyping ? 'печатает...' : 'онлайн',
-              style: GoogleFonts.montserrat(
-                color: isTyping ? AppTheme.toxicYellow : Colors.grey.shade400,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                fontStyle: isTyping ? FontStyle.italic : FontStyle.normal,
+              SizedBox(width: 6),
+              
+              // Текст печати
+              Text(
+                'печатает...',
+                style: GoogleFonts.montserrat(
+                  color: AppTheme.toxicYellow,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  fontStyle: FontStyle.italic,
+                ),
               ),
-            ),
+            ] else if (partnerUserId != null) ...[
+              // Статус активности пользователя
+              UserActivityStatus(
+                userId: partnerUserId!,
+                showOnlineIndicator: true,
+                textStyle: GoogleFonts.montserrat(
+                  color: Colors.grey.shade400,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+                onlineColor: Colors.green,
+                offlineColor: Colors.grey.shade400,
+              ),
+            ] else ...[
+              // Заглушка если нет ID пользователя
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: Colors.grey,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              SizedBox(width: 6),
+              
+              Text(
+                'неизвестно',
+                style: GoogleFonts.montserrat(
+                  color: Colors.grey.shade400,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
           ],
         ),
       ],

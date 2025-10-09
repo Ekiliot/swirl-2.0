@@ -3,8 +3,10 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:eva_icons_flutter/eva_icons_flutter.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../theme/app_theme.dart';
 import '../models/chat_message.dart';
+import 'reply_widget.dart';
 
 class MessageBubble extends StatefulWidget {
   final ChatMessage message;
@@ -73,7 +75,10 @@ class _MessageBubbleState extends State<MessageBubble> {
     final message = widget.message;
     return CupertinoContextMenu(
       actions: _buildContextMenuActions(),
-      child: Stack(
+      enableHapticFeedback: false,
+      child: Transform.translate(
+        offset: Offset.zero,
+        child: Stack(
         children: [
           Container(
             constraints: BoxConstraints(
@@ -118,6 +123,19 @@ class _MessageBubbleState extends State<MessageBubble> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min, // Зависит от содержимого
               children: [
+                // Отображение ответа на сообщение
+                if (message.replyToMessageId != null)
+                  ReplyWidget(
+                    replyToMessage: ChatMessage(
+                      text: message.replyToText ?? '',
+                      isMine: message.replyToSenderId == FirebaseAuth.instance.currentUser?.uid,
+                      timestamp: DateTime.now(), // Временная заглушка
+                    ),
+                    onTap: () {
+                      // TODO: Прокрутить к сообщению, на которое отвечаем
+                    },
+                  ),
+                
                 Text(
                   message.text,
                   style: GoogleFonts.montserrat(
@@ -148,6 +166,7 @@ class _MessageBubbleState extends State<MessageBubble> {
           ),
         ],
       ),
+    ),
     );
   }
 
@@ -331,21 +350,6 @@ class _MessageBubbleState extends State<MessageBubble> {
       },
     ));
 
-    // Переслать
-    actions.add(CupertinoContextMenuAction(
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(EvaIcons.shareOutline, size: 18, color: AppTheme.toxicYellow),
-          SizedBox(width: 8),
-          Text('Переслать'),
-        ],
-      ),
-      onPressed: () {
-        Navigator.pop(context); // Закрываем меню
-        widget.onForward?.call();
-      },
-    ));
 
     return actions;
   }

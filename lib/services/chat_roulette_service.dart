@@ -238,6 +238,9 @@ class ChatRouletteService {
     String? mediaUrl,
     int? mediaSize,
     int? mediaDuration,
+    String? replyToMessageId,
+    String? replyToText,
+    String? replyToSenderId,
   }) async {
     final userId = _currentUserId;
     if (userId == null) throw StateError('Пользователь не авторизован');
@@ -256,6 +259,13 @@ class ChatRouletteService {
       if (mediaUrl != null) messageData['mediaUrl'] = mediaUrl;
       if (mediaSize != null) messageData['mediaSize'] = mediaSize;
       if (mediaDuration != null) messageData['mediaDuration'] = mediaDuration;
+    }
+
+    // Добавляем данные ответа если есть
+    if (replyToMessageId != null) {
+      messageData['replyToMessageId'] = replyToMessageId;
+      if (replyToText != null) messageData['replyToText'] = replyToText;
+      if (replyToSenderId != null) messageData['replyToSenderId'] = replyToSenderId;
     }
 
     await _firestore

@@ -3,8 +3,10 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:eva_icons_flutter/eva_icons_flutter.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../theme/app_theme.dart';
 import '../models/chat_message.dart';
+import 'reply_widget.dart';
 
 class MediaMessageBubble extends StatelessWidget {
   final ChatMessage message;
@@ -56,185 +58,215 @@ class MediaMessageBubble extends StatelessWidget {
         mainAxisAlignment: message.isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
         children: [
           Flexible(
-            child: CupertinoContextMenu(
-              actions: _buildContextMenuActions(context),
-              child: Container(
-              constraints: BoxConstraints(
-                maxWidth: MediaQuery.of(context).size.width * 0.75, // Ограничиваем ширину
-                maxHeight: 200,
-              ),
-              child: Stack(
-                children: [
-                  // Основной контейнер медиа
-                  Container(
-                    decoration: BoxDecoration(
-                      gradient: message.isMine
-                          ? LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [
-                                AppTheme.toxicYellow,
-                                AppTheme.darkYellow,
-                              ],
-                            )
-                          : null,
-                      color: message.isMine ? null : AppTheme.darkGray,
-                      borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(24),
-                        topRight: Radius.circular(24),
-                        bottomLeft: Radius.circular(message.isMine ? 24 : 6),
-                        bottomRight: Radius.circular(message.isMine ? 6 : 24),
-                      ),
-                      border: message.isMine 
-                          ? null 
-                          : Border.all(
-                              color: AppTheme.mediumGray.withValues(alpha: 0.5),
-                              width: 1,
-                            ),
-                      boxShadow: message.isMine
-                          ? [
-                              BoxShadow(
-                                color: AppTheme.toxicYellow.withValues(alpha: 0.2),
-                                blurRadius: 12,
-                                offset: Offset(0, 4),
-                              ),
-                            ]
-                          : [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.1),
-                                blurRadius: 8,
-                                offset: Offset(0, 2),
-                              ),
-                            ],
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.only(
-                            topLeft: Radius.circular(24),
-                            topRight: Radius.circular(24),
-                            bottomLeft: Radius.circular(message.isMine ? 24 : 6),
-                            bottomRight: Radius.circular(message.isMine ? 6 : 24),
-                          ),
-                          child: _buildMediaContent(),
-                        ),
-                        SizedBox(height: 8),
-                        Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          child: Row(
-                            mainAxisAlignment: message.isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
-                            children: [
-                              Text(
-                                _formatTime(message.timestamp),
-                                style: GoogleFonts.montserrat(
-                                  color: message.isMine ? AppTheme.pureBlack.withValues(alpha: 0.7) : Colors.grey.shade500,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              SizedBox(width: 8), // Паддинг между временем и иконкой
-                              _buildReadStatus(),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  
-                  // Индикатор типа медиа
-                  Positioned(
-                    top: 8,
-                    right: 8,
+             child: CupertinoContextMenu(
+               actions: _buildContextMenuActions(context),
+               enableHapticFeedback: false,
+              // Оборачиваем child в RepaintBoundary + SizedBox, чтобы зафиксировать footprint
+              // и избежать "прыжков" layout при поднятии child в overlay.
+              child: RepaintBoundary(
+                child: SizedBox(
+                  // Фиксированная высота "следа" в layout.
+                  // Подбирайте значение под ваш реальный размер виджета.
+                  // В моём расчёте: media (200) + padding/промежутки => ~240-260.
+                  height: 260,
+                  child: Transform.translate(
+                    offset: Offset.zero,
                     child: Container(
-                      padding: EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.6),
-                        borderRadius: BorderRadius.circular(12),
+                      constraints: BoxConstraints(
+                        maxWidth: MediaQuery.of(context).size.width * 0.75, // Ограничиваем ширину
+                        // убрал maxHeight, чтобы SizedBox управлял высотой footprint
                       ),
-                      child: Icon(
-                        isPhoto ? EvaIcons.imageOutline : EvaIcons.videoOutline,
-                        color: Colors.white,
-                        size: 16,
+                      child: Stack(
+                        children: [
+                          // Основной контейнер медиа
+                          Container(
+                            decoration: BoxDecoration(
+                              gradient: message.isMine
+                                  ? LinearGradient(
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                      colors: [
+                                        AppTheme.toxicYellow,
+                                        AppTheme.darkYellow,
+                                      ],
+                                    )
+                                  : null,
+                              color: message.isMine ? null : AppTheme.darkGray,
+                              borderRadius: BorderRadius.only(
+                                topLeft: Radius.circular(24),
+                                topRight: Radius.circular(24),
+                                bottomLeft: Radius.circular(message.isMine ? 24 : 6),
+                                bottomRight: Radius.circular(message.isMine ? 6 : 24),
+                              ),
+                              border: message.isMine
+                                  ? null
+                                  : Border.all(
+                                      color: AppTheme.mediumGray.withValues(alpha: 0.5),
+                                      width: 1,
+                                    ),
+                              boxShadow: message.isMine
+                                  ? [
+                                      BoxShadow(
+                                        color: AppTheme.toxicYellow.withValues(alpha: 0.2),
+                                        blurRadius: 12,
+                                        offset: Offset(0, 4),
+                                      ),
+                                    ]
+                                  : [
+                                      BoxShadow(
+                                        color: Colors.black.withValues(alpha: 0.1),
+                                        blurRadius: 8,
+                                        offset: Offset(0, 2),
+                                      ),
+                                    ],
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                // Отображение ответа на сообщение
+                                if (message.replyToMessageId != null)
+                                  Padding(
+                                    padding: EdgeInsets.all(12),
+                                    child: ReplyWidget(
+                                      replyToMessage: ChatMessage(
+                                        text: message.replyToText ?? '',
+                                        isMine: message.replyToSenderId == FirebaseAuth.instance.currentUser?.uid,
+                                        timestamp: DateTime.now(), // Временная заглушка
+                                      ),
+                                      onTap: () {
+                                        // TODO: Прокрутить к сообщению, на которое отвечаем
+                                      },
+                                    ),
+                                  ),
+                                
+                                ClipRRect(
+                                  borderRadius: BorderRadius.only(
+                                    topLeft: Radius.circular(24),
+                                    topRight: Radius.circular(24),
+                                    bottomLeft: Radius.circular(message.isMine ? 24 : 6),
+                                    bottomRight: Radius.circular(message.isMine ? 6 : 24),
+                                  ),
+                                  child: _buildMediaContent(),
+                                ),
+                                SizedBox(height: 8),
+                                Padding(
+                                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                  child: Row(
+                                    mainAxisAlignment: message.isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        _formatTime(message.timestamp),
+                                        style: GoogleFonts.montserrat(
+                                          color: message.isMine ? AppTheme.pureBlack.withValues(alpha: 0.7) : Colors.grey.shade500,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                      SizedBox(width: 8), // Паддинг между временем и иконкой
+                                      _buildReadStatus(),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          // Индикатор типа медиа
+                          Positioned(
+                            top: 8,
+                            right: 8,
+                            child: Container(
+                              padding: EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.6),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Icon(
+                                isPhoto ? EvaIcons.imageOutline : EvaIcons.videoOutline,
+                                color: Colors.white,
+                                size: 16,
+                              ),
+                            ),
+                          ),
+
+                          // Индикатор загрузки
+                          if (message.isUploading)
+                            Positioned.fill(
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.5),
+                                  borderRadius: BorderRadius.only(
+                                    topLeft: Radius.circular(24),
+                                    topRight: Radius.circular(24),
+                                    bottomLeft: Radius.circular(message.isMine ? 24 : 6),
+                                    bottomRight: Radius.circular(message.isMine ? 6 : 24),
+                                  ),
+                                ),
+                                child: Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      CircularProgressIndicator(
+                                        color: AppTheme.toxicYellow,
+                                        strokeWidth: 2,
+                                      ),
+                                      SizedBox(height: 8),
+                                      Text(
+                                        'Загрузка...',
+                                        style: GoogleFonts.montserrat(
+                                          color: Colors.white,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                          // Индикатор ошибки
+                          if (message.hasError)
+                            Positioned.fill(
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.red.withValues(alpha: 0.8),
+                                  borderRadius: BorderRadius.only(
+                                    topLeft: Radius.circular(24),
+                                    topRight: Radius.circular(24),
+                                    bottomLeft: Radius.circular(message.isMine ? 24 : 6),
+                                    bottomRight: Radius.circular(message.isMine ? 6 : 24),
+                                  ),
+                                ),
+                                child: Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        EvaIcons.alertCircleOutline,
+                                        color: Colors.white,
+                                        size: 24,
+                                      ),
+                                      SizedBox(height: 4),
+                                      Text(
+                                        'Ошибка загрузки',
+                                        style: GoogleFonts.montserrat(
+                                          color: Colors.white,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                   ),
-                  
-                  // Индикатор загрузки
-                  if (message.isUploading)
-                    Positioned.fill(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.5),
-                          borderRadius: BorderRadius.only(
-                            topLeft: Radius.circular(24),
-                            topRight: Radius.circular(24),
-                            bottomLeft: Radius.circular(message.isMine ? 24 : 6),
-                            bottomRight: Radius.circular(message.isMine ? 6 : 24),
-                          ),
-                        ),
-                        child: Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              CircularProgressIndicator(
-                                color: AppTheme.toxicYellow,
-                                strokeWidth: 2,
-                              ),
-                              SizedBox(height: 8),
-                              Text(
-                                'Загрузка...',
-                                style: GoogleFonts.montserrat(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  
-                  // Индикатор ошибки
-                  if (message.hasError)
-                    Positioned.fill(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.red.withValues(alpha: 0.8),
-                          borderRadius: BorderRadius.only(
-                            topLeft: Radius.circular(24),
-                            topRight: Radius.circular(24),
-                            bottomLeft: Radius.circular(message.isMine ? 24 : 6),
-                            bottomRight: Radius.circular(message.isMine ? 6 : 24),
-                          ),
-                        ),
-                        child: Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                EvaIcons.alertCircleOutline,
-                                color: Colors.white,
-                                size: 24,
-                              ),
-                              SizedBox(height: 4),
-                              Text(
-                                'Ошибка загрузки',
-                                style: GoogleFonts.montserrat(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
+                ),
               ),
-            ),
             ),
           ),
         ],
@@ -303,7 +335,7 @@ class MediaMessageBubble extends StatelessWidget {
         ],
       );
     }
-    
+
     // Если нет миниатюры, показываем обычную загрузку
     if (message.mediaUrl != null) {
       return Image.network(
@@ -326,7 +358,7 @@ class MediaMessageBubble extends StatelessWidget {
         },
       );
     }
-    
+
     return _buildPlaceholderContent();
   }
 
@@ -362,7 +394,7 @@ class MediaMessageBubble extends StatelessWidget {
                   )
                 : _buildPlaceholderContent(),
           ),
-          
+
           // Кнопка воспроизведения
           Center(
             child: Container(
@@ -378,7 +410,7 @@ class MediaMessageBubble extends StatelessWidget {
               ),
             ),
           ),
-          
+
           // Длительность видео (если есть)
           if (message.mediaDuration != null)
             Positioned(
@@ -415,8 +447,8 @@ class MediaMessageBubble extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              message.mediaType == 'photo' 
-                  ? EvaIcons.imageOutline 
+              message.mediaType == 'photo'
+                  ? EvaIcons.imageOutline
                   : EvaIcons.videoOutline,
               color: AppTheme.toxicYellow.withValues(alpha: 0.5),
               size: 48,
@@ -498,7 +530,7 @@ class MediaMessageBubble extends StatelessWidget {
     final int seconds = (milliseconds / 1000).round();
     final int minutes = seconds ~/ 60;
     final int remainingSeconds = seconds % 60;
-    
+
     if (minutes > 0) {
       return '${minutes}:${remainingSeconds.toString().padLeft(2, '0')}';
     } else {
@@ -514,7 +546,7 @@ class MediaMessageBubble extends StatelessWidget {
 
   Widget _buildReadStatus() {
     if (!message.isMine) return SizedBox.shrink();
-    
+
     if (!message.isRead) {
       return Icon(Icons.done, size: 18, color: Colors.grey);
     } else {
@@ -634,8 +666,8 @@ class MediaMessageBubble extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            isPinned ? EvaIcons.pin : EvaIcons.pinOutline, 
-            size: 18, 
+            isPinned ? EvaIcons.pin : EvaIcons.pinOutline,
+            size: 18,
             color: AppTheme.toxicYellow
           ),
           SizedBox(width: 8),
@@ -664,21 +696,6 @@ class MediaMessageBubble extends StatelessWidget {
       },
     ));
 
-    // Переслать
-    actions.add(CupertinoContextMenuAction(
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(EvaIcons.shareOutline, size: 18, color: AppTheme.toxicYellow),
-          SizedBox(width: 8),
-          Text('Переслать'),
-        ],
-      ),
-      onPressed: () {
-        Navigator.pop(context); // Закрываем меню
-        onForward?.call();
-      },
-    ));
 
     return actions;
   }

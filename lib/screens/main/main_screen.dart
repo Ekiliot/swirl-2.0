@@ -6,6 +6,7 @@ import 'package:animations/animations.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../theme/app_theme.dart';
 import '../../services/chat_service.dart';
+import '../../widgets/user_activity_status.dart';
 import '../match/match_screen.dart';
 import '../chat_roulette/chat_roulette_screen.dart';
 import '../profile/profile_screen.dart';
@@ -738,12 +739,23 @@ class _MainScreenState extends State<MainScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
-                              partnerInfo['name'],
-                              style: GoogleFonts.montserrat(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
+                            Expanded(
+                              child: Row(
+                                children: [
+                                  Text(
+                                    partnerInfo['name'],
+                                    style: GoogleFonts.montserrat(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  SizedBox(width: 8),
+                                  CompactActivityStatus(
+                                    userId: partnerInfo['id'] as String,
+                                    isOnline: false, // Будет обновляться динамически
+                                  ),
+                                ],
                               ),
                             ),
                             Text(
