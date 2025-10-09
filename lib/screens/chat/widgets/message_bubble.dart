@@ -5,7 +5,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:eva_icons_flutter/eva_icons_flutter.dart';
 import '../../../theme/app_theme.dart';
 import '../models/chat_message.dart';
-import 'smooth_context_menu.dart';
 
 class MessageBubble extends StatefulWidget {
   final ChatMessage message;
@@ -72,7 +71,7 @@ class _MessageBubbleState extends State<MessageBubble> {
 
   Widget _buildBubble(BuildContext context) {
     final message = widget.message;
-    return SmoothContextMenu(
+    return CupertinoContextMenu(
       actions: _buildContextMenuActions(),
       child: Stack(
         children: [

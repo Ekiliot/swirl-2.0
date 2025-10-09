@@ -5,7 +5,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:eva_icons_flutter/eva_icons_flutter.dart';
 import '../../../theme/app_theme.dart';
 import '../models/chat_message.dart';
-import 'smooth_context_menu.dart';
 
 class MediaMessageBubble extends StatelessWidget {
   final ChatMessage message;
@@ -57,7 +56,7 @@ class MediaMessageBubble extends StatelessWidget {
         mainAxisAlignment: message.isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
         children: [
           Flexible(
-            child: SmoothContextMenu(
+            child: CupertinoContextMenu(
               actions: _buildContextMenuActions(context),
               child: Container(
               constraints: BoxConstraints(
